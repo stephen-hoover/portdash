@@ -1,0 +1,15 @@
+*.pyc
+*~
+.project
+.pydevproject
+#*
+.idea
+.ipynb_checkpoints
+
+*.egg-info
+
+cache/
+cache_backup/
+data/
+
+portdash/config.py
