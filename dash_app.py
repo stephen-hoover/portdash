@@ -356,7 +356,8 @@ def _make_summed_graph(account_names, lines, min_date, max_date):
     lines = _standardize_lines(lines)
     plots = []
     axes_used = {config.WHICH_AXIS[l] for l in lines}
-    lines_on_y2 = filter(lambda x: config.WHICH_AXIS[x] == 'pct', config.WHICH_AXIS)
+    lines_on_y2 = list(filter(lambda x: config.WHICH_AXIS[x] == 'pct',
+                              config.WHICH_AXIS))
     for line in lines:
         if line in lines_on_y2 and len(axes_used) > 1:
             which_y = 'y2'
