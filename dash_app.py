@@ -4,8 +4,8 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 
-from portdash.acemoney import get_etl_accounts
 from portdash import config
+import portdash.database as db
 
 import dash
 import dash_core_components as dcc
@@ -13,14 +13,13 @@ import dash_html_components as html
 import plotly.graph_objs as go
 
 
-accounts, max_trans_date = get_etl_accounts(refresh=False)
-last_quote_date = max((a.index.max() for a in accounts.values())).date()
 app = dash.Dash(name="portfolio_dashboard")
 app.title = "Portfolio Dashboard"
 
 app.layout = html.Div(children=[
     dcc.Dropdown(id='portfolio-selector',
-                 options=[{'label': n, 'value': n} for n in accounts] +
+                 options=[{'label': n, 'value': n}
+                          for n in db.get_account_names()] +
                          [{'label': 'All Accounts', 'value': 'All Accounts'}],
                  multi=True,
                  placeholder='Select an account',
@@ -73,8 +72,9 @@ app.layout = html.Div(children=[
     html.Hr(style={'margin-top': 0}),
     dcc.Graph(id='portfolio-value'),
     html.Div(id='cache', style={'display': 'none'}),
-    html.P(children=f'Quotes last updated {last_quote_date}'),
-    html.P(children=f'The most recent transaction was on {max_trans_date}'),
+    html.P(children=f'Quotes last updated {db.get_last_quote_date()}'),
+    html.P(children=f'The most recent transaction was on '
+                    f'{db.get_max_trans_date()}'),
 ]
 )
 
@@ -135,14 +135,6 @@ def get_stop_time(date_range, max_range):
         return None
 
 
-@lru_cache(20)
-def get_account(account_names):
-    if 'All Accounts' in account_names:
-        account_names = [k for k in accounts
-                         if not k.startswith('Simulated')]
-    return sum(accounts[name] for name in account_names)
-
-
 def get_nonzero_range(trace):
     trace_gt0 = trace[trace > 0.02]
     return trace_gt0.index.min(), trace_gt0.index.max()
@@ -154,7 +146,7 @@ def total_rate_of_return(account_names, start_date, stop_date):
 
 @lru_cache(1028)
 def _total_ror(account_names, start_date, stop_date):
-    acct = get_account(account_names)
+    acct = db.sum_accounts(account_names)
     first_date, last_date = get_nonzero_range(acct['_total'])
     start_date = max([first_date, start_date])
     stop_date = max([min([last_date, stop_date]),
@@ -170,8 +162,7 @@ def calculate_traces(account_names, start_time=None, stop_time=None,
     if not account_names:
         raise NoUpdate()
     if 'All Accounts' in account_names:
-        account_names = [k for k in accounts
-                         if not k.startswith('Simulated')]
+        account_names = db.get_account_names(simulated=False)
     account_names = tuple(sorted(account_names))
     all_traces, max_range, latest_time = _calculate_traces(account_names)
 
@@ -184,7 +175,7 @@ def calculate_traces(account_names, start_time=None, stop_time=None,
 
 @lru_cache(20)
 def _calculate_traces(account_names):
-    acct = get_account(account_names)
+    acct = db.sum_accounts(account_names)
     all_traces = pd.DataFrame(index=acct.index)
     max_range = all_traces.index.max()
     latest_time = all_traces.index.min()

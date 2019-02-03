@@ -395,12 +395,7 @@ def refresh_portfolio(refresh_cache=False):
     with open(config.ETL_ACCTS, 'wb') as _fout:
         pickle.dump((accounts, max_trans_date.date()), _fout)
 
-
-def get_etl_accounts(refresh=False, download_quotes=False):
-    if refresh or not os.path.exists(config.ETL_ACCTS):
-        refresh_portfolio(refresh_cache=download_quotes)
-    return pickle.load(open(config.ETL_ACCTS, 'rb'))
-
+    return accounts, max_trans_date.date()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -410,4 +405,4 @@ if __name__ == '__main__':
                         help="Refresh historical quotes from Alpha Vantage")
     args = parser.parse_args()
 
-    refresh_portfolio(refresh_cache=args.quotes)
+    _ = refresh_portfolio(refresh_cache=args.quotes)
