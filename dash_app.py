@@ -194,7 +194,7 @@ def _calculate_traces(account_names):
 
         y_gt0 = y[y > 0]
         if len(y_gt0) > 0:
-            max_range = min((y_gt0.index.min(), max_range))
+            max_range = min((y_gt0.index.min() - timedelta(days=1), max_range))
             if line.split(':')[0] == '_total':
                 latest_time = max((y_gt0.index.max(), latest_time))
     return all_traces, max_range, latest_time
