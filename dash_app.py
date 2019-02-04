@@ -228,19 +228,19 @@ def reset_zoom(date_range):
 
 
 @app.callback(dash.dependencies.Output('date-selector', 'start_date'),
-              [dash.dependencies.Input('portfolio-selector', 'value'),
-               dash.dependencies.Input('date-range', 'value'),
-               dash.dependencies.Input('portfolio-value', 'relayoutData')])
-def update_date_sel_min(acct_names, date_rng, graph_rng):
+              [dash.dependencies.Input('date-range', 'value'),
+               dash.dependencies.Input('portfolio-value', 'relayoutData')],
+              [dash.dependencies.State('portfolio-selector', 'value')])
+def update_date_sel_min(date_rng, graph_rng, acct_names):
     md, _ = min_max_date(acct_names, date_rng, graph_rng)
     return md
 
 
 @app.callback(dash.dependencies.Output('date-selector', 'end_date'),
-              [dash.dependencies.Input('portfolio-selector', 'value'),
-               dash.dependencies.Input('date-range', 'value'),
-               dash.dependencies.Input('portfolio-value', 'relayoutData')])
-def update_date_sel_max(acct_names, date_rng, graph_rng):
+              [dash.dependencies.Input('date-range', 'value'),
+               dash.dependencies.Input('portfolio-value', 'relayoutData')],
+              [dash.dependencies.State('portfolio-selector', 'value')])
+def update_date_sel_max(date_rng, graph_rng, acct_names):
     _, md = min_max_date(acct_names, date_rng, graph_rng)
     return md
 
