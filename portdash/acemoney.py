@@ -1,6 +1,7 @@
 """Read transaction logs from AceMoney
 """
 import argparse
+from datetime import datetime, timedelta
 from glob import glob
 import logging
 import os
@@ -234,6 +235,9 @@ def fetch_quotes(symbol, refresh_cache=False, retry_errored_cache=False):
         quotes = pd.read_csv(fname, **reader_kwargs)
         if quotes.index.name == '{' and retry_errored_cache:
             quotes = None
+        elif datetime.today() - quotes.index[0] < timedelta(days=1):
+            # If these quotes are current, then we don't need to re-download
+            return quotes
 
     if refresh_cache or quotes is None:
         log.info('Reading %s data from Alpha Vantage.', symbol)
