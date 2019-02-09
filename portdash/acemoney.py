@@ -248,7 +248,7 @@ def fetch_quotes(symbol, refresh_cache=False, retry_errored_cache=False):
         if new_quotes.index.name == '{':
             # This is an error message.
             raise ValueError(f'Error fetching "{symbol}": '
-                             f'{quotes.index[0].strip()}')
+                             f'{new_quotes.index[0].strip()}')
         if quotes is not None:
             new_rows = new_quotes[new_quotes.index > quotes.index.max()]
             quotes = (quotes
