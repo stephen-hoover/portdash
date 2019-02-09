@@ -241,7 +241,6 @@ def fetch_quotes(symbol, refresh_cache=False, retry_errored_cache=False):
 
     if refresh_cache or quotes is None:
         log.info('Reading %s data from Alpha Vantage.', symbol)
-        time.sleep(15)
         new_quotes = pd.read_csv(av_api.format(symbol=symbol,
                                                api_key=config.AV_API_KEY),
                                  **reader_kwargs)
@@ -272,6 +271,7 @@ def fetch_all_quotes(symbols, refresh_cache=False, retry_errored_cache=False):
             quotes[symbol] = fetch_quotes(
                 symbol, refresh_cache=refresh_cache,
                 retry_errored_cache=retry_errored_cache)
+            time.sleep(15)  # Don't exceed API rate limit
         except ValueError as err:
             if str(err).startswith('Error fetching'):
                 failed.append(symbol)
