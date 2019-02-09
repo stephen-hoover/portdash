@@ -262,18 +262,22 @@ def update_value_box(acct_names, min_date, max_date):
     change = np.round(max_val - min_val, 2)
     sign = "+" if change > 0 else "-"
 
-    pct_change = np.abs(change / min_val)
-    n_years = (max_date - min_date).total_seconds() / (365 * 86400)
-    annualized_chg = np.power(1 + pct_change, 1 / n_years) - 1
-
     chg_color = "green" if change > 0 else "red"
     components = [
         html.Span(f"${min_val:,.2f} \u2192 ${max_val:,.2f} ("),
         html.Span(f"{sign}${abs(change):,.2f}", style={'color': chg_color}),
-        html.Span(", "),
-        html.Span(f"{sign}{annualized_chg:.2%}", style={'color': chg_color}),
-        html.Span(" annualized)"),
     ]
+    if min_val > 0:
+        # Calculate an annualized change iff we have a finite percent change
+        pct_change = np.abs(change / min_val)
+        n_years = (max_date - min_date).total_seconds() / (365 * 86400)
+        ann_chg = np.power(1 + pct_change, 1 / n_years) - 1
+        components.extend([
+            html.Span(", "),
+            html.Span(f"{sign}{ann_chg:.2%}", style={'color': chg_color}),
+            html.Span(" annualized"),
+        ])
+    components.append(html.Span(")"))
     return components
 
 
