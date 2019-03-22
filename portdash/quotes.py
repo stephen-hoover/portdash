@@ -21,7 +21,10 @@ AV_API = ('https://www.alphavantage.co/query?'
           '&apikey={api_key}')
 
 
-def fetch_quotes(symbol, refresh_cache=False, retry_errored_cache=False):
+def fetch_quotes(symbol: str,
+                 refresh_cache: bool=False,
+                 retry_errored_cache: bool=False,
+                 api_delay: float=0):
     fname = os.path.join(config.CACHE_DIR, f'{symbol}.csv')
     reader_kwargs = {'index_col': 0, 'parse_dates': True,
                      'infer_datetime_format': True}
@@ -40,6 +43,8 @@ def fetch_quotes(symbol, refresh_cache=False, retry_errored_cache=False):
         new_quotes = pd.read_csv(AV_API.format(symbol=symbol,
                                                api_key=config.AV_API_KEY),
                                  **reader_kwargs)
+        if api_delay:
+            time.sleep(api_delay)  # Don't exceed API rate limit
         if new_quotes.index.name == '{':
             # This is an error message.
             raise ValueError(f'Error fetching "{symbol}": '
@@ -66,8 +71,8 @@ def fetch_all_quotes(symbols, refresh_cache=False, retry_errored_cache=False):
         try:
             quotes[symbol] = fetch_quotes(
                 symbol, refresh_cache=refresh_cache,
-                retry_errored_cache=retry_errored_cache)
-            time.sleep(15)  # Don't exceed API rate limit
+                retry_errored_cache=retry_errored_cache,
+                api_delay=15)
         except ValueError as err:
             if str(err).startswith('Error fetching'):
                 failed.append(symbol)
