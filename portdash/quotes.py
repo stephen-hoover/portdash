@@ -24,13 +24,13 @@ AV_API = ('https://www.alphavantage.co/query?'
 def fetch_quotes(symbol: str,
                  refresh_cache: bool=False,
                  retry_errored_cache: bool=False,
-                 api_delay: float=0):
+                 api_delay: float=0) -> pd.DataFrame:
     fname = os.path.join(config.CACHE_DIR, f'{symbol}.csv')
     reader_kwargs = {'index_col': 0, 'parse_dates': True,
                      'infer_datetime_format': True}
     quotes = None
     if os.path.exists(fname):
-        log.info('Reading %s data from cache.', symbol)
+        log.info(f'Reading {symbol} data from cache.')
         quotes = pd.read_csv(fname, **reader_kwargs)
         if quotes.index.name == '{' and retry_errored_cache:
             quotes = None
@@ -39,7 +39,7 @@ def fetch_quotes(symbol: str,
             return quotes
 
     if refresh_cache or quotes is None:
-        log.info('Reading %s data from Alpha Vantage.', symbol)
+        log.info(f'Reading {symbol} data from Alpha Vantage.')
         new_quotes = pd.read_csv(AV_API.format(symbol=symbol,
                                                api_key=config.AV_API_KEY),
                                  **reader_kwargs)
@@ -64,7 +64,9 @@ def fetch_quotes(symbol: str,
     return quotes
 
 
-def fetch_all_quotes(symbols, refresh_cache=False, retry_errored_cache=False):
+def fetch_all_quotes(symbols: Iterable[str],
+                     refresh_cache: bool=False,
+                     retry_errored_cache: bool=False) -> Dict[str, pd.DataFrame]:
     failed = []
     quotes = {}
     for symbol in symbols:
@@ -122,17 +124,17 @@ def get_dividend(symbol: str,
     return qu
 
 
-def cached_symbols(cache_dir: str=config.CACHE_DIR):
+def _cached_symbols(cache_dir: str=config.CACHE_DIR):
     return map(lambda x: os.path.splitext(x)[0],
                map(os.path.basename, glob(os.path.join(cache_dir, '*.csv'))))
 
 
 def read_all_quotes(all_symbols: Iterable[str]=None,
                     skip_downloads: Iterable[str]=config.SKIP_SYMBOL_DOWNLOADS,
-                    refresh_cache: bool=False):
+                    refresh_cache: bool=False) -> Dict[str, pd.DataFrame]:
     if all_symbols is None:
         log.info('Reading all quotes in cache directory.')
-        all_symbols = cached_symbols()
+        all_symbols = _cached_symbols()
     log.info(f"Don't try to download quotes for {skip_downloads}")
     symbols_to_download = set(all_symbols) - set(skip_downloads)
 
