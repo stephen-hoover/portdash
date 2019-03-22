@@ -3,7 +3,7 @@ from glob import glob
 import logging
 import os
 import time
-from typing import Iterable
+from typing import Dict, Iterable
 
 import pandas as pd
 
@@ -86,7 +86,10 @@ def fetch_all_quotes(symbols, refresh_cache=False, retry_errored_cache=False):
     return quotes
 
 
-def get_price(symbol, index, quotes=None):
+def get_price(symbol: str,
+              index: pd.DatetimeIndex,
+              quotes: Dict[str, pd.DataFrame]=None) -> pd.Series:
+    """Fetch prices for a given symbol in the provided date range"""
     if quotes is not None:
         this_quote = quotes[symbol]
     else:
@@ -96,6 +99,27 @@ def get_price(symbol, index, quotes=None):
              .fillna(method='ffill')
              .fillna(method='bfill'))
     return price
+
+
+def get_dividend(symbol: str,
+                 index: pd.DatetimeIndex=None,
+                 start: pd.Timestamp=None,
+                 end: pd.Timestamp=None,
+                 quotes: Dict[str, pd.DataFrame]=None) -> pd.Series:
+    """Fetch dividends from a given symbol in the provided date range"""
+    qu = quotes[symbol] if quotes else fetch_quotes(symbol)
+    if index is not None:
+        start = index.min()
+        end = index.max()
+    if start is None or end is None:
+        raise TypeError('Provide either an index or start and end times.')
+    if 'dividend_amount' not in qu:
+        raise ValueError('Provide a quote dictionary with a '
+                         '"dividend_amount" column.')
+    qu = qu[(qu.index >= start) & (qu.index <= end)]
+    qu = qu[qu['dividend_amount'] != 0]['dividend_amount']
+    qu.index.name = ""
+    return qu
 
 
 def cached_symbols(cache_dir: str=config.CACHE_DIR):
