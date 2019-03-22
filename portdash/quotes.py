@@ -86,8 +86,12 @@ def fetch_all_quotes(symbols, refresh_cache=False, retry_errored_cache=False):
     return quotes
 
 
-def get_price(symbol, quotes, index):
-    price = (quotes[symbol]['close']
+def get_price(symbol, index, quotes=None):
+    if quotes is not None:
+        this_quote = quotes[symbol]
+    else:
+        this_quote = fetch_quotes(symbol)
+    price = (this_quote['close']
              .reindex(index, method='ffill')
              .fillna(method='ffill')
              .fillna(method='bfill'))

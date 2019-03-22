@@ -46,12 +46,12 @@ def record_action(portfolio, action, quote_dict):
         sign = -1 if action['Action'] == 'Buy' else 1
         portfolio.loc[action['Date']:, "cash"] += sign * action['Total']
     if action['Action'] == 'Add Shares' and '__contribution__' in action['Comment']:
-        price = quotes.get_price(action.Symbol, quote_dict, portfolio.index)[action.Date]
+        price = quotes.get_price(action.Symbol, portfolio.index, quote_dict)[action.Date]
         log.debug(f"Contribution of {action.Quantity} shares of "
                   f"{action.Symbol} @ {price} per share.")
         portfolio.loc[action.Date:, 'contributions'] += price * action['Quantity']
     if action['Action'] == 'Add Shares' and '__dividend__' in action['Comment']:
-        value = quotes.get_price(action.Symbol, quote_dict, portfolio.index)[
+        value = quotes.get_price(action.Symbol, portfolio.index, quote_dict)[
                     action.Date] * action['Quantity']
         log.debug(f"Dividend of {action.Quantity} shares of {action.Symbol} "
                   f"is ${value}.")
@@ -87,8 +87,8 @@ def convert_action(action, quote_dict, to_symbol, index, ignore_commission=False
         return None
 
     from_symbol = action['Symbol']
-    from_price = quotes.get_price(from_symbol, quote_dict, index)[action.Date]
-    to_price = quotes.get_price(to_symbol, quote_dict, index)[action.Date]
+    from_price = quotes.get_price(from_symbol, index, quote_dict)[action.Date]
+    to_price = quotes.get_price(to_symbol, index, quote_dict)[action.Date]
 
     action['Symbol'] = to_symbol
     if action['Action'] in ['Buy', 'Sell']:
@@ -123,7 +123,7 @@ def add_sim_dividend(portfolio, quote_dict, sim_symbol):
 
     for date in div.index:
         if date in portfolio.index:
-            price = quotes.get_price(sim_symbol, quote_dict, portfolio.index)[date]
+            price = quotes.get_price(sim_symbol, portfolio.index, quote_dict)[date]
             value = (portfolio.loc[date, sim_symbol] *
                      qu.loc[[date], 'dividend_amount'])
             value = value.reindex(portfolio.index, method='ffill').fillna(0)
