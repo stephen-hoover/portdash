@@ -1,10 +1,11 @@
+import argparse
 from datetime import timedelta
 from functools import lru_cache
 
 import numpy as np
 import pandas as pd
 
-from portdash import config
+from portdash.config import conf, load_config
 import portdash.database as db
 
 import dash
@@ -12,6 +13,16 @@ import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
 
+# We need to read and set the config before defining the app layout,
+# so all of the argparse code needs to be at module level.
+parser = argparse.ArgumentParser(
+    description="Run the Portfolio Dashboard application")
+parser.add_argument('--conf', required=True,
+                    help="Configuration file in YAML format")
+parser.add_argument('--debug', action='store_true',
+                    help="Run the Dash server in debug mode")
+args = parser.parse_args()
+load_config(args.conf)
 
 app = dash.Dash(name="portfolio_dashboard")
 app.title = "Portfolio Dashboard"
@@ -26,7 +37,7 @@ app.layout = html.Div(children=[
                  value=['All Accounts']),
     dcc.Dropdown(id='line-selector',
                  options=[{'label': v, 'value': k}
-                          for k, v in config.LINES.items()],
+                          for k, v in conf('lines').items()],
                  multi=True,
                  value=['_total:1']),
     html.Div([
@@ -179,7 +190,7 @@ def _calculate_traces(account_names):
     all_traces = pd.DataFrame(index=acct.index)
     max_range = all_traces.index.max()
     latest_time = all_traces.index.min()
-    for line in config.LINES.keys():
+    for line in conf('lines').keys():
         if line.startswith('netcont:'):
             y = acct['contributions'] - acct['withdrawals']
         elif line.startswith('netgain:'):
@@ -360,9 +371,9 @@ def _make_summed_graph(account_names, lines, min_date, max_date):
 
     lines = _standardize_lines(lines)
     plots = []
-    axes_used = {config.WHICH_AXIS[l] for l in lines}
-    lines_on_y2 = list(filter(lambda x: config.WHICH_AXIS[x] == 'pct',
-                              config.WHICH_AXIS))
+    axes_used = {conf('which_axis')[l] for l in lines}
+    lines_on_y2 = list(filter(lambda x: conf('which_axis')[x] == 'pct',
+                              conf('which_axis')))
     for line in lines:
         if line in lines_on_y2 and len(axes_used) > 1:
             which_y = 'y2'
@@ -370,10 +381,10 @@ def _make_summed_graph(account_names, lines, min_date, max_date):
             which_y = 'y1'
         y = all_traces[line.split(':')[0]]
         plots.append(go.Scatter(x=y.index, y=y, mode='lines',
-                                name=config.LINES[line], yaxis=which_y))
+                                name=conf('lines')[line], yaxis=which_y))
     return {
         'data': plots,
-        'layout': get_layout(axes_used, [config.LINES[l] for l in lines]),
+        'layout': get_layout(axes_used, [conf('lines')[l] for l in lines]),
     }
 
 
@@ -391,9 +402,9 @@ def _make_comparison_graph(account_names, lines, min_date, max_date):
                                 name=name, yaxis='y1'))
     return {
         'data': plots,
-        'layout': get_layout(config.WHICH_AXIS[line], [config.LINES[line]]),
+        'layout': get_layout(conf('which_axis')[line], [conf('lines')[line]]),
     }
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=args.debug)

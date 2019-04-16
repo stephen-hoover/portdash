@@ -12,4 +12,5 @@ cache/
 cache_backup/
 data/
 
-portdash/config.py
+*.yaml
+!example_config.yaml

@@ -29,17 +29,17 @@ from typing import Dict, Tuple
 import pandas as pd
 
 from portdash import acemoney as processing
-from portdash import config
+from portdash.config import conf
 
 
 @lru_cache(5)
 def _get_accounts(refresh: bool=False,
                   download_quotes: bool=False) -> Dict[str, pd.DataFrame]:
     """Return dictionary of all accounts, keyed by account name"""
-    if refresh or not os.path.exists(config.ETL_ACCTS):
+    if refresh or not os.path.exists(conf('etl_accts')):
         accts = processing.refresh_portfolio(refresh_cache=download_quotes)[0]
     else:
-        accts = pickle.load(open(config.ETL_ACCTS, 'rb'))[0]
+        accts = pickle.load(open(conf('etl_accts'), 'rb'))[0]
     return accts
 
 
@@ -92,4 +92,4 @@ def get_last_quote_date() -> date:
 
 def get_max_trans_date() -> date:
     """Return the date of the last transaction in the database"""
-    return pickle.load(open(config.ETL_ACCTS, 'rb'))[1]
+    return pickle.load(open(conf('etl_accts'), 'rb'))[1]

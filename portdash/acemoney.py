@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 
 from portdash import config, quotes
+from portdash.config import conf
 
 log = logging.getLogger(__name__)
 
@@ -185,8 +186,8 @@ def make_dummy_prices(symbol, prototype_symbol, value: float = 1):
 
     I can run it by hand once, then be done with it.
     """
-    fname_prototype = os.path.join(config.CACHE_DIR, f'{prototype_symbol}.csv')
-    fname_new = os.path.join(config.CACHE_DIR, f'{symbol}.csv')
+    fname_prototype = os.path.join(conf('cache_dir'), f'{prototype_symbol}.csv')
+    fname_new = os.path.join(conf('cache_dir'), f'{symbol}.csv')
     reader_kwargs = {'index_col': 0, 'parse_dates': True,
                      'infer_datetime_format': True}
     prototype_quotes = pd.read_csv(fname_prototype, **reader_kwargs)
@@ -230,32 +231,36 @@ def create_simulated_portfolio(investment_tranactions: pd.DataFrame,
     return sim_acct
 
 
-def read_investment_transactions(fname=config.INVESTMENT_TRANS_FNAME):
+def read_investment_transactions(fname=None):
+    if not fname:
+        fname = conf('investment_transactions')
     inv = pd.read_csv(fname,
                       dtype={'Dividend': float, 'Price': float, 'Total': float,
                              'Commission': float, 'Quantity': float},
                       parse_dates=[0],
                       thousands=',')
 
-    log.info(f'Ignore transactions in {config.SKIP_ACCOUNTS} accounts.')
-    inv = inv.drop(inv[inv.Account.isin(config.SKIP_ACCOUNTS)].index)
+    log.info(f'Ignore transactions in {conf("skip_accounts")} accounts.')
+    inv = inv.drop(inv[inv.Account.isin(conf('skip_accounts'))].index)
     return inv
 
 
-def read_portfolio_transactions(all_fnames=config.PORT_TRANSACTIONS):
+def read_portfolio_transactions(acct_fnames=None):
+    if not acct_fnames:
+        acct_fnames = conf('account_transactions')
     return {acct_name: pd.read_csv(fname, parse_dates=[0], thousands=',')
-            for acct_name, fname in all_fnames.items()
-            if fname and acct_name not in config.SKIP_ACCOUNTS}
+            for acct_name, fname in acct_fnames.items()
+            if fname and acct_name not in conf('skip_accounts')}
 
 
 def refresh_portfolio(refresh_cache=False):
     """This is the "main" function; it runs everything."""
     logging.basicConfig(level='INFO')
 
-    os.makedirs(config.CACHE_DIR, exist_ok=True)
-    inv = read_investment_transactions(config.INVESTMENT_TRANS_FNAME)
+    os.makedirs(conf('cache_dir'), exist_ok=True)
+    inv = read_investment_transactions(conf('investment_transactions'))
     quote_dict = quotes.read_all_quotes(inv.Symbol.unique(),
-                                        config.SKIP_SYMBOL_DOWNLOADS,
+                                        conf('skip_symbol_downloads'),
                                         refresh_cache)
     max_date = max((q.index.max() for q in quote_dict.values()))
     log.info(f"The most recent quote is from {max_date}")
@@ -274,7 +279,7 @@ def refresh_portfolio(refresh_cache=False):
 
     max_trans_date = None
     portfolio_transactions = read_portfolio_transactions(
-        config.PORT_TRANSACTIONS)
+        conf('account_transactions'))
     for acct_name, trans in portfolio_transactions.items():
         log.info('Logging portfolio transactions for %s.', acct_name)
         record_trans(accounts[acct_name], trans)
@@ -289,7 +294,7 @@ def refresh_portfolio(refresh_cache=False):
             max_trans_date = max((max_trans_date, trans['Date'].max()))
     all_accounts['_total'] += all_accounts['cash']
 
-    for symbol in config.SYMBOLS_TO_SIMULATE:
+    for symbol in conf('symbols_to_simulate'):
         log.info('Simulating all transactions as %s.', symbol)
         name = f'Simulated {symbol} All-Account'
         accounts[name] = create_simulated_portfolio(
@@ -297,7 +302,7 @@ def refresh_portfolio(refresh_cache=False):
 
     log.info("The most recent transaction was on %s", max_trans_date)
 
-    with open(config.ETL_ACCTS, 'wb') as _fout:
+    with open(conf('etl_accts'), 'wb') as _fout:
         pickle.dump((accounts, max_trans_date.date()), _fout)
 
     return accounts, max_trans_date.date()
@@ -308,6 +313,9 @@ if __name__ == '__main__':
                     "can be used by the Portfolio Tracker Dash app.")
     parser.add_argument('--quotes', action='store_true', default=False,
                         help="Refresh historical quotes from Alpha Vantage")
+    parser.add_argument('--conf', required=True,
+                        help="Configuration file in YAML format")
     args = parser.parse_args()
 
+    config.load_config(args.conf)
     _ = refresh_portfolio(refresh_cache=args.quotes)

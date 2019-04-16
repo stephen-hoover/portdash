@@ -1,0 +1,31 @@
+###########################
+# Required keys
+
+av_api_key: ''
+
+## The data directory defaults to 'data' in the app install directory,
+## the default location for generated sample data files.
+#data_dir:
+
+# These files are assumed to all be in the data_dir
+investment_transactions: sample_investment_transactions.csv
+account_transactions:
+    'My 401(k)': sample_401k.csv
+
+
+#################
+## Optional keys:
+
+## You can override the "cache_dir" if desired. The default is 'cache' in
+## the app install directory.
+#cache_dir:
+
+## Create a simulated portfolio for each of these ticker symbols
+#symbols_to_simulate: []
+
+## Don't attempt to download these tickers
+#skip_symbol_downloads: []
+
+## Use this to ignore some accounts which might
+## be in the `investment_transactions` file
+#skip_accounts: []
