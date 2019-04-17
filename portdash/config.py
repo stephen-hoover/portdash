@@ -60,7 +60,7 @@ def update_config(config_dict) -> None:
         acct_files = CONF_STATE['account_transactions']
         acct_files[key] = os.path.join(data_dir, acct_files[key])
 
-    if 'av_api_key' not in CONF_STATE:
+    if not CONF_STATE.get('av_api_key'):
         CONF_STATE['av_api_key'] = os.getenv('AV_API_KEY')
 
 
