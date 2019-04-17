@@ -6,12 +6,17 @@ The other kind of file holds all transactions
 (including non-investment transactions) in each account, and there's
 one per account.
 """
+import csv
 from datetime import datetime
+import logging
+import os
 from typing import Dict, Tuple, Union
 
+import numpy as np
 import pandas as pd
+import yaml
 
-from portdash import quotes
+from portdash import config, quotes
 
 TRANS_HEADER = ["Date", "Action", "Symbol", "Account", "Dividend",
                 "Price", "Quantity", "Commission", "Total", "Comment"]
@@ -30,7 +35,7 @@ def _create_single_buy_transactions(dates: pd.DatetimeIndex,
     trans = pd.DataFrame({"Date": dates, "Action": "Buy",
                           "Symbol": symbol, "Account": account,
                           "Dividend": 0., "Price": prices,
-                          "Quantity": contribution / prices,
+                          "Quantity": np.round(contribution / prices, 4),
                           "Commission": 0.,
                           "Total": contribution,
                           "Comment": ""},
@@ -60,9 +65,9 @@ def _include_reinvest_dividend(buy_transactions: pd.DataFrame,
             {"Date": date, "Action": "Reinvest Dividend", "Symbol": symbol,
              "Commission": 0., "Total": 0., "Comment": "",
              "Account": trans['Account'].unique()[0],
-             "Dividend": n_shares * div_value,
+             "Dividend": round(n_shares * div_value, 2),
              "Price": prices.loc[date],
-             "Quantity": (n_shares * div_value) / prices.loc[date],
+             "Quantity": round((n_shares * div_value) / prices.loc[date], 4),
              },
             columns=TRANS_HEADER, index=[len(div_trans)])
         div_trans = div_trans.append(div_trans_row)
@@ -126,8 +131,8 @@ def _get_total(df: pd.DataFrame) -> pd.Series:
 def create_transactions(monthly_contribution: float,
                         security_mix: Dict[str, float],
                         start_date: Union[str, datetime],
-                        stop_date: Union[str, datetime],
-                        account: str) \
+                        stop_date: Union[str, datetime]=None,
+                        account: str='My 401(k)') \
       -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Create investment and account transaction tables
 
@@ -135,6 +140,8 @@ def create_transactions(monthly_contribution: float,
     with that contribution, generate AceMoney-formatted tables of
     investment transactions and account transactions.
     """
+    if stop_date is None:
+        stop_date = datetime.today()
     date_range = pd.bdate_range(start=start_date, end=stop_date, freq='BM')
     transact_list = []
     for symbol, frac in security_mix.items():
@@ -150,3 +157,44 @@ def create_transactions(monthly_contribution: float,
     acct_trans['Total'] = _get_total(acct_trans)
 
     return invest_trans, acct_trans
+
+
+def write_sample_data(monthly_contribution: float,
+                      security_mix: Dict[str, float],
+                      start_date: Union[str, datetime],
+                      stop_date: Union[str, datetime]=None,
+                      account: str='My 401(k)',
+                      config_fname: str='sample_config.yaml',
+                      av_api_key: str=None,
+                      ) -> None:
+    """
+
+    Example
+    -------
+    # This assumes that there's an AlphaVantage API key in the
+    # environment variable "AV_API_KEY".
+    python -c "from portdash.sample import *; write_sample_data(100, {'VFAIX': 0.5, 'VDAIX': 0.3, 'VEIEX': 0.2}, '2010-01-01')"
+    python portdash/acemoney.py -c sample_config.yaml
+    python dash_app.py -c sample_config.yaml
+    """
+    logging.basicConfig(level='INFO')
+    config.update_config(
+        {'investment_transactions': 'sample_investment_transactions.csv',
+         'account_transactions': {account: 'sample_account.csv'},
+         'av_api_key': av_api_key,
+         })
+    invest_trans, acct_trans = create_transactions(monthly_contribution,
+                                                   security_mix,
+                                                   start_date,
+                                                   stop_date,
+                                                   account)
+
+    os.makedirs(config.conf('data_dir'), exist_ok=True)
+    invest_trans.to_csv(config.conf('investment_transactions'),
+                        index=False, quoting=csv.QUOTE_ALL)
+    acct_trans.to_csv(config.conf('account_transactions')[account],
+                      index=False, quoting=csv.QUOTE_ALL)
+
+    print(f'Writing a sample config file to {config_fname}.')
+    with open(config_fname, 'wt') as _fout:
+        yaml.dump(config.get_config(), _fout)

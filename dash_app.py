@@ -17,7 +17,7 @@ import plotly.graph_objs as go
 # so all of the argparse code needs to be at module level.
 parser = argparse.ArgumentParser(
     description="Run the Portfolio Dashboard application")
-parser.add_argument('--conf', required=True,
+parser.add_argument('-c', '--conf', required=True,
                     help="Configuration file in YAML format")
 parser.add_argument('--debug', action='store_true',
                     help="Run the Dash server in debug mode")

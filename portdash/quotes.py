@@ -26,6 +26,7 @@ def fetch_quotes(symbol: str,
                  retry_errored_cache: bool=False,
                  api_delay: float=0) -> pd.DataFrame:
     fname = os.path.join(conf('cache_dir'), f'{symbol}.csv')
+    os.makedirs(conf('cache_dir'), exist_ok=True)
     reader_kwargs = {'index_col': 0, 'parse_dates': True,
                      'infer_datetime_format': True}
     quotes = None

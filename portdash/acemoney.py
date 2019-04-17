@@ -255,8 +255,6 @@ def read_portfolio_transactions(acct_fnames=None):
 
 def refresh_portfolio(refresh_cache=False):
     """This is the "main" function; it runs everything."""
-    logging.basicConfig(level='INFO')
-
     os.makedirs(conf('cache_dir'), exist_ok=True)
     inv = read_investment_transactions(conf('investment_transactions'))
     quote_dict = quotes.read_all_quotes(inv.Symbol.unique(),
@@ -307,15 +305,17 @@ def refresh_portfolio(refresh_cache=False):
 
     return accounts, max_trans_date.date()
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Process portfolio data exported from AceMoney so that it "
                     "can be used by the Portfolio Tracker Dash app.")
     parser.add_argument('--quotes', action='store_true', default=False,
                         help="Refresh historical quotes from Alpha Vantage")
-    parser.add_argument('--conf', required=True,
+    parser.add_argument('-c', '--conf', required=True,
                         help="Configuration file in YAML format")
     args = parser.parse_args()
 
+    logging.basicConfig(level='INFO')
     config.load_config(args.conf)
     _ = refresh_portfolio(refresh_cache=args.quotes)

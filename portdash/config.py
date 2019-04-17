@@ -1,4 +1,6 @@
 import os
+from typing import Dict
+
 import yaml
 
 INSTALL_DIR = os.path.split(os.path.dirname(__file__))[0]
@@ -38,9 +40,14 @@ CONF_STATE = {
 
 
 def load_config(filename: str) -> None:
-    global CONF_STATE
     with open(filename, 'rt') as _fin:
-        CONF_STATE.update(yaml.load(_fin))
+        conf_dict = yaml.load(_fin)
+    update_config(conf_dict)
+
+
+def update_config(config_dict) -> None:
+    global CONF_STATE
+    CONF_STATE.update(config_dict)
 
     for key in ['data_dir', 'cache_dir', 'etl_accts']:
         CONF_STATE[key] = os.path.expanduser(CONF_STATE[key])
@@ -53,6 +60,13 @@ def load_config(filename: str) -> None:
         acct_files = CONF_STATE['account_transactions']
         acct_files[key] = os.path.join(data_dir, acct_files[key])
 
+    if 'av_api_key' not in CONF_STATE:
+        CONF_STATE['av_api_key'] = os.getenv('AV_API_KEY')
+
 
 def conf(key: str):
     return CONF_STATE[key]
+
+
+def get_config() -> Dict:
+    return CONF_STATE
