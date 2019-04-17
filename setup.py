@@ -8,6 +8,12 @@ def main():
         author="Stephen Hoover",
         author_email="Stephen.LD.Hoover@gmail.com",
         packages=find_packages(),
+        install_requires=[
+            'pyyaml',
+            'pandas',
+            'numpy',
+            'dash',
+        ],
     )
 
 
