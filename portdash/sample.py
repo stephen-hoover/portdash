@@ -167,7 +167,11 @@ def write_sample_data(monthly_contribution: float,
                       config_fname: str='sample_config.yaml',
                       av_api_key: str=None,
                       ) -> None:
-    """
+    """Write sample CSVs for specified investment contributions
+
+     Assume that there's one contribution at the end of each month,
+     and that contributions are split between securities in a way
+     described by the `security_mix` input.
 
     Example
     -------
@@ -178,6 +182,9 @@ def write_sample_data(monthly_contribution: float,
     python dash_app.py -c sample_config.yaml
     """
     logging.basicConfig(level='INFO')
+
+    # Use default config as much as possible and create file names for the
+    # sample data we're going to write.
     config.update_config(
         {'investment_transactions': 'sample_investment_transactions.csv',
          'account_transactions': {account: 'sample_account.csv'},
