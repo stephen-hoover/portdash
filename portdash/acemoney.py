@@ -1,6 +1,7 @@
 """Read transaction logs from AceMoney
 """
 import argparse
+from datetime import datetime
 import logging
 import os
 import pickle
@@ -80,13 +81,13 @@ def convert_action(action: pd.Series,
     if action['Action'] in ['Reinvest Dividend', 'Reinvest L-Term CG Dist',
                             'Reinvest S-Term CG Dist']:
         if action['Total']:
-            print(action)
+            log.warning(f"Unexpected nonzero total in action: {action}")
         return
     skip_comment_flags = ['__dividend__', '__split__', '__merger__']
     if not pd.isnull(action['Comment']) and any(
           [f in action['Comment'] for f in skip_comment_flags]):
         if action['Total']:
-            print(action)
+            log.warning(f"Unexpected nonzero total in action: {action}")
         return
 
     from_symbol = action['Symbol']
@@ -95,8 +96,7 @@ def convert_action(action: pd.Series,
 
     action['Symbol'] = to_symbol
     if action['Action'] in ['Buy', 'Sell']:
-        action['Quantity'] = (
-                             action['Total'] - action['Commission']) / to_price
+        action['Quantity'] = (action['Total'] - action['Commission']) / to_price
         action['Price'] = to_price
     elif action['Action'] in ['Add Shares', 'Remove Shares']:
         new_qty = action['Quantity'] * from_price / to_price
@@ -203,7 +203,9 @@ def create_simulated_portfolio(investment_tranactions: pd.DataFrame,
                                max_date: pd.datetime,
                                sim_symbol: str='SWPPX') -> pd.DataFrame:
     inv = investment_tranactions
-    index = pd.date_range(start=inv['Date'].min(), end=max_date, freq='D')
+    min_port = min(p['Date'].min() for p in port_trans.values())
+    index = pd.date_range(start=min(inv['Date'].min(), min_port),
+                          end=max_date, freq='D')
     sim_acct = init_portfolio(index)
     for idx, row in inv.iterrows():
         if sim_symbol and row['Symbol'] not in ['SWXXX']:
@@ -236,19 +238,28 @@ def read_investment_transactions(fname: str=None) -> pd.DataFrame:
     return inv
 
 
-def read_portfolio_transactions(acct_fnames: Dict[str, str]=None) \
+def read_portfolio_transactions(acct_fnames: Dict[str, str]=None,
+                                ignore_future: bool=True) \
       -> Dict[str, pd.DataFrame]:
     if not acct_fnames:
         acct_fnames = conf('account_transactions')
-    return {acct_name: pd.read_csv(fname, parse_dates=[0], thousands=',')
-            for acct_name, fname in acct_fnames.items()
-            if fname and acct_name not in conf('skip_accounts')}
+    trans = {acct_name: pd.read_csv(fname, parse_dates=[0], thousands=',')
+             for acct_name, fname in acct_fnames.items()
+             if fname and acct_name not in conf('skip_accounts')}
+    if ignore_future:
+        # Filter out any transactions marked as being in the future.
+        # This can happen with scheduled transactions.
+        today = datetime.today()
+        trans = {k: v[v['Date'] <= today] for k, v in trans.items()}
+    return trans
 
 
 def refresh_portfolio(refresh_cache: bool=False):
     """This is the "main" function; it runs everything."""
     os.makedirs(conf('cache_dir'), exist_ok=True)
     inv = read_investment_transactions(conf('investment_transactions'))
+    portfolio_transactions = read_portfolio_transactions(
+        conf('account_transactions'))
     # Read all the quotes either from disk or from the web.
     # We won't use the quote_dict except to get a most recent available date,
     # but this call will cache the data and read from the web if requested.
@@ -258,7 +269,9 @@ def refresh_portfolio(refresh_cache: bool=False):
     max_date = max((q.index.max() for q in quote_dict.values()))
     log.info(f"The most recent quote is from {max_date}")
 
-    index = pd.date_range(start=inv['Date'].min(), end=max_date, freq='D')
+    min_port = min(p['Date'].min() for p in portfolio_transactions.values())
+    index = pd.date_range(start=min(inv['Date'].min(), min_port),
+                          end=max_date, freq='D')
     accounts = {}
     all_accounts = init_portfolio(index)
     for idx, row in inv.iterrows():
@@ -271,8 +284,6 @@ def refresh_portfolio(refresh_cache: bool=False):
         total_portfolio(acct)
 
     max_trans_date = None
-    portfolio_transactions = read_portfolio_transactions(
-        conf('account_transactions'))
     for acct_name, trans in portfolio_transactions.items():
         log.info('Logging portfolio transactions for %s.', acct_name)
         record_trans(accounts[acct_name], trans)
