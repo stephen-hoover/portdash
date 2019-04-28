@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
+from functools import lru_cache
 from glob import glob
 import logging
 import os
 import time
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Tuple, Union
 
 import pandas as pd
 
@@ -11,6 +12,8 @@ from portdash.config import conf
 
 log = logging.getLogger(__name__)
 
+CSV_READER_KWARGS = {'index_col': 0, 'parse_dates': True,
+                     'infer_datetime_format': True}
 
 # Get historical prices from Alpha Vantage's API
 AV_API = ('https://www.alphavantage.co/query?'
@@ -21,47 +24,88 @@ AV_API = ('https://www.alphavantage.co/query?'
           '&apikey={api_key}')
 
 
+@lru_cache(1024)
+def _memo_from_cache(fname: str, mod_tm: float) \
+      -> Tuple[pd.DataFrame, bool]:
+    """Memoize reads from disk. Use time since file modification to
+    invalidate previous reads"""
+    log.debug(f'Reading from cache {fname}.')
+    quotes = pd.read_csv(fname, **CSV_READER_KWARGS)
+    if _is_error(quotes):
+        current = False
+    else:
+        # If these quotes are current, then we don't need to re-download
+        current = (datetime.today() - quotes.index[0] < timedelta(days=1))
+    return quotes, current
+
+
+def _fetch_from_cache(fname: str) -> Tuple[pd.DataFrame, bool]:
+    """Read the cached value of a security over time.
+
+    If the file hasn't changed since the last time we read it,
+    we can use the in-memory cache and skip re-reading from disk.
+    """
+    return _memo_from_cache(fname, os.path.getmtime(fname))
+
+
+def _fetch_from_web(symbol: str, api_delay: float=0) -> pd.DataFrame:
+    log.info(f'Reading {symbol} data from Alpha Vantage.')
+    new_quotes = pd.read_csv(AV_API.format(symbol=symbol,
+                                           api_key=conf('av_api_key')),
+                             **CSV_READER_KWARGS)
+    if api_delay:
+        time.sleep(api_delay)  # Don't exceed API rate limit
+    if _is_error(new_quotes):
+        _raise_quote_error(new_quotes, symbol)
+
+    return new_quotes
+
+
+def _update_cache(quotes: Union[pd.DataFrame, None],
+                  new_quotes: pd.DataFrame, fname: str) \
+      -> pd.DataFrame:
+    if quotes is not None and not _is_error(quotes):
+        new_rows = new_quotes[new_quotes.index > quotes.index.max()]
+        quotes = (quotes
+                  .append(new_rows, verify_integrity=True)
+                  .sort_index(ascending=False))
+    else:
+        quotes = new_quotes
+    os.makedirs(conf('cache_dir'), exist_ok=True)
+    quotes.to_csv(fname, index=True, header=True)
+    return quotes
+
+
+def _is_error(quotes: pd.DataFrame) -> bool:
+    """Check for errors in the quote download"""
+    return quotes.index.name == '{'
+
+
+def _raise_quote_error(quotes: pd.DataFrame, symbol: str):
+    raise ValueError(f'Error fetching "{symbol}": '
+                     f'{quotes.index[0].strip()}')
+
+
 def fetch_quotes(symbol: str,
                  refresh_cache: bool=False,
                  retry_errored_cache: bool=False,
                  api_delay: float=0) -> pd.DataFrame:
     fname = os.path.join(conf('cache_dir'), f'{symbol}.csv')
-    os.makedirs(conf('cache_dir'), exist_ok=True)
-    reader_kwargs = {'index_col': 0, 'parse_dates': True,
-                     'infer_datetime_format': True}
     quotes = None
     if os.path.exists(fname):
-        log.info(f'Reading {symbol} data from cache.')
-        quotes = pd.read_csv(fname, **reader_kwargs)
-        if quotes.index.name == '{' and retry_errored_cache:
+        quotes, quotes_are_current = _fetch_from_cache(fname)
+        # If the quotes are current, we don't need to re-download.
+        refresh_cache = refresh_cache and (not quotes_are_current)
+        if retry_errored_cache and _is_error(quotes):
             quotes = None
-        elif datetime.today() - quotes.index[0] < timedelta(days=1):
-            # If these quotes are current, then we don't need to re-download
-            return quotes
 
     if refresh_cache or quotes is None:
-        log.info(f'Reading {symbol} data from Alpha Vantage.')
-        new_quotes = pd.read_csv(AV_API.format(symbol=symbol,
-                                               api_key=conf('av_api_key')),
-                                 **reader_kwargs)
-        if api_delay:
-            time.sleep(api_delay)  # Don't exceed API rate limit
-        if new_quotes.index.name == '{':
-            # This is an error message.
-            raise ValueError(f'Error fetching "{symbol}": '
-                             f'{new_quotes.index[0].strip()}')
-        if quotes is not None:
-            new_rows = new_quotes[new_quotes.index > quotes.index.max()]
-            quotes = (quotes
-                      .append(new_rows, verify_integrity=True)
-                      .sort_index(ascending=False))
-        else:
-            quotes = new_quotes
-        quotes.to_csv(fname, index=True, header=True)
-    if quotes.index.name == '{':
-        # This is an error message.
-        raise ValueError(f'Error fetching "{symbol}": '
-                         f'{quotes.index[0].strip()}')
+        new_quotes = _fetch_from_web(symbol, api_delay=api_delay)
+        quotes = _update_cache(quotes, new_quotes, fname)
+
+    if _is_error(quotes):
+        _raise_quote_error(quotes, symbol)
+
     return quotes
 
 
