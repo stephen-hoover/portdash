@@ -4,7 +4,7 @@ from glob import glob
 import logging
 import os
 import time
-from typing import Dict, Iterable, Tuple, Union
+from typing import Dict, Iterable, Sequence, Tuple, Union
 
 import pandas as pd
 
@@ -134,17 +134,30 @@ def fetch_all_quotes(symbols: Iterable[str],
 
 
 def get_price(symbol: str,
-              index: pd.DatetimeIndex,
+              index: Union[pd.DatetimeIndex, Sequence[pd.datetime]],
               quotes: Dict[str, pd.DataFrame]=None) -> pd.Series:
     """Fetch prices for a given symbol in the provided date range"""
     if quotes is not None:
-        this_quote = quotes[symbol]
+        this_quote = quotes.get(symbol)
     else:
-        this_quote = fetch_quotes(symbol)
-    price = (this_quote['close']
-             .reindex(index, method='ffill')
-             .fillna(method='ffill')
-             .fillna(method='bfill'))
+        try:
+            this_quote = fetch_quotes(symbol)
+        except ValueError:
+            log.exception(f"Unable to get price for {symbol}. "
+                          f"Assuming price is zero.")
+            this_quote = None
+
+    if this_quote is None:
+        log.error(f"Couldn't find a price for {symbol}. "
+                  f"Assuming its value is zero.")
+        price = pd.Series(0., index=index)
+    else:
+        # Use "ffill" to take us through e.g. weekends. Use bfill to
+        # make sure that we have valid prices at the beginning of the series.
+        price = (this_quote['close']
+                 .reindex(index, method='ffill')
+                 .fillna(method='ffill')
+                 .fillna(method='bfill'))
     return price
 
 

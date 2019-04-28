@@ -4,7 +4,7 @@ import argparse
 import logging
 import os
 import pickle
-from typing import Dict
+from typing import Dict, Union
 
 import pandas as pd
 import numpy as np
@@ -15,7 +15,7 @@ from portdash.config import conf
 log = logging.getLogger(__name__)
 
 
-def init_portfolio(index):
+def init_portfolio(index: pd.DatetimeIndex) -> pd.DataFrame:
     """A `portfolio` DataFrame has two columns for each investment,
     one for total number of shares at any particular time and
     another for total distributions from each investment.
@@ -24,7 +24,7 @@ def init_portfolio(index):
                          'contributions': 0., 'withdrawals': 0.}, index=index)
 
 
-def record_action(portfolio, action, quote_dict):
+def record_action(portfolio: pd.DataFrame, action: pd.Series) -> pd.DataFrame:
     """Mark the results of an investment transaction in a portfolio
 
     `portfolio`: pd.DataFrame
@@ -47,13 +47,13 @@ def record_action(portfolio, action, quote_dict):
         sign = -1 if action['Action'] == 'Buy' else 1
         portfolio.loc[action['Date']:, "cash"] += sign * action['Total']
     if action['Action'] == 'Add Shares' and '__contribution__' in action['Comment']:
-        price = quotes.get_price(action.Symbol, portfolio.index, quote_dict)[action.Date]
+        price = quotes.get_price(action.Symbol, [action.Date]).values[0]
         log.debug(f"Contribution of {action.Quantity} shares of "
                   f"{action.Symbol} @ {price} per share.")
         portfolio.loc[action.Date:, 'contributions'] += price * action['Quantity']
     if action['Action'] == 'Add Shares' and '__dividend__' in action['Comment']:
-        value = quotes.get_price(action.Symbol, portfolio.index, quote_dict)[
-                    action.Date] * action['Quantity']
+        value = (quotes.get_price(action.Symbol, [action.Date]).values[0] *
+                 action['Quantity'])
         log.debug(f"Dividend of {action.Quantity} shares of {action.Symbol} "
                   f"is ${value}.")
         portfolio.loc[action.Date:, f"{action.Symbol}_dist"] += value
@@ -62,7 +62,9 @@ def record_action(portfolio, action, quote_dict):
     return portfolio
 
 
-def convert_action(action, quote_dict, to_symbol, index, ignore_commission=False):
+def convert_action(action: pd.Series,
+                   to_symbol: str,
+                   ignore_commission: bool=False) -> Union[pd.Series, None]:
     """For simulated portfolios
 
     Convert an action on one security to an action on another security.
@@ -79,17 +81,17 @@ def convert_action(action, quote_dict, to_symbol, index, ignore_commission=False
                             'Reinvest S-Term CG Dist']:
         if action['Total']:
             print(action)
-        return None
+        return
     skip_comment_flags = ['__dividend__', '__split__', '__merger__']
     if not pd.isnull(action['Comment']) and any(
           [f in action['Comment'] for f in skip_comment_flags]):
         if action['Total']:
             print(action)
-        return None
+        return
 
     from_symbol = action['Symbol']
-    from_price = quotes.get_price(from_symbol, index, quote_dict)[action.Date]
-    to_price = quotes.get_price(to_symbol, index, quote_dict)[action.Date]
+    from_price = quotes.get_price(from_symbol, [action.Date]).values[0]
+    to_price = quotes.get_price(to_symbol, [action.Date]).values[0]
 
     action['Symbol'] = to_symbol
     if action['Action'] in ['Buy', 'Sell']:
@@ -110,24 +112,23 @@ def convert_action(action, quote_dict, to_symbol, index, ignore_commission=False
     else:
         raise RuntimeError(f"Encountered action {action['Action']}")
 
-    if from_symbol in []:
-        print(action)
     return action
 
 
-def add_sim_dividend(portfolio, quote_dict, sim_symbol):
+def add_sim_dividend(portfolio: pd.DataFrame, sim_symbol: str) -> pd.DataFrame:
     """Look at a portfolio and add the dividends that you would have gotten
     from a particular security. For simulated portfolios.
     """
-    qu = quote_dict[sim_symbol]
-    div = qu[qu.dividend_amount != 0].sort_index(ascending=True)
-
-    for date in div.index:
+    div = quotes.get_dividend(sim_symbol, portfolio.index)
+    for date, amount in div.iteritems():
         if date in portfolio.index:
-            price = quotes.get_price(sim_symbol, portfolio.index, quote_dict)[date]
-            value = (portfolio.loc[date, sim_symbol] *
-                     qu.loc[[date], 'dividend_amount'])
+            price = quotes.get_price(sim_symbol, [date]).values[0]
+
+            # Create a Series with 0s before the date, and the value of
+            # the distribution at and after the date.
+            value = portfolio.loc[[date], sim_symbol] * amount
             value = value.reindex(portfolio.index, method='ffill').fillna(0)
+
             qty = value / price
             portfolio[f"{sim_symbol}_dist"] += value
             portfolio[sim_symbol] += qty
@@ -136,26 +137,17 @@ def add_sim_dividend(portfolio, quote_dict, sim_symbol):
     return portfolio
 
 
-def total_portfolio(portfolio, quote_dict):
+def total_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
     symbols = [c for c in portfolio.columns if c == c.upper()]
     portfolio['_total'] = 0.
     for symbol in symbols:
-        if symbol not in quote_dict:
-            log.error(f"Couldn't find a price for {symbol}. "
-                      f"Assuming its value is zero.")
-            continue
-        # Use "ffill" to take us through e.g. weekends. Use bfill to
-        # make sure that we have valid prices at the beginning of the series.
-        price = (quote_dict[symbol]['close']
-                 .reindex(portfolio.index, method='ffill')
-                 .fillna(method='ffill')
-                 .fillna(method='bfill'))
+        price = quotes.get_price(symbol, portfolio.index)
         portfolio[f"{symbol}_value"] = portfolio[symbol] * price
         portfolio['_total'] += portfolio[f"{symbol}_value"]
     return portfolio
 
 
-def record_trans(portfolio, transactions):
+def record_trans(portfolio: pd.DataFrame, transactions: pd.DataFrame) -> pd.DataFrame:
     # A "Category" with an "@" should be accounted for by
     # investment transactions
     transactions = (transactions[~transactions['Category']
@@ -180,7 +172,7 @@ def record_trans(portfolio, transactions):
     return portfolio
 
 
-def make_dummy_prices(symbol, prototype_symbol, value: float = 1):
+def make_dummy_prices(symbol: str, prototype_symbol: str, value: float = 1):
     """Read the quotes for the prototype symbol, and replace all
     prices with the `value`.
 
@@ -208,21 +200,20 @@ def make_dummy_prices(symbol, prototype_symbol, value: float = 1):
 
 def create_simulated_portfolio(investment_tranactions: pd.DataFrame,
                                port_trans: Dict[str, pd.DataFrame],
-                               quote_dict: Dict[str, pd.DataFrame],
+                               max_date: pd.datetime,
                                sim_symbol: str='SWPPX') -> pd.DataFrame:
     inv = investment_tranactions
-    max_date = max((q.index.max() for q in quote_dict.values()))
     index = pd.date_range(start=inv['Date'].min(), end=max_date, freq='D')
     sim_acct = init_portfolio(index)
     for idx, row in inv.iterrows():
         if sim_symbol and row['Symbol'] not in ['SWXXX']:
             # SWXXX is a money market fund; used like cash
-            row = convert_action(row, quote_dict, sim_symbol, sim_acct.index)
+            row = convert_action(row, sim_symbol)
         if row is None:
             continue
-        record_action(sim_acct, row, quote_dict)
-    sim_acct = add_sim_dividend(sim_acct, quote_dict, sim_symbol)
-    total_portfolio(sim_acct, quote_dict)
+        record_action(sim_acct, row)
+    sim_acct = add_sim_dividend(sim_acct, sim_symbol)
+    total_portfolio(sim_acct)
 
     for acct_name, trans in port_trans.items():
         record_trans(sim_acct, trans)
@@ -231,7 +222,7 @@ def create_simulated_portfolio(investment_tranactions: pd.DataFrame,
     return sim_acct
 
 
-def read_investment_transactions(fname=None):
+def read_investment_transactions(fname: str=None) -> pd.DataFrame:
     if not fname:
         fname = conf('investment_transactions')
     inv = pd.read_csv(fname,
@@ -245,7 +236,8 @@ def read_investment_transactions(fname=None):
     return inv
 
 
-def read_portfolio_transactions(acct_fnames=None):
+def read_portfolio_transactions(acct_fnames: Dict[str, str]=None) \
+      -> Dict[str, pd.DataFrame]:
     if not acct_fnames:
         acct_fnames = conf('account_transactions')
     return {acct_name: pd.read_csv(fname, parse_dates=[0], thousands=',')
@@ -253,27 +245,30 @@ def read_portfolio_transactions(acct_fnames=None):
             if fname and acct_name not in conf('skip_accounts')}
 
 
-def refresh_portfolio(refresh_cache=False):
+def refresh_portfolio(refresh_cache: bool=False):
     """This is the "main" function; it runs everything."""
     os.makedirs(conf('cache_dir'), exist_ok=True)
     inv = read_investment_transactions(conf('investment_transactions'))
+    # Read all the quotes either from disk or from the web.
+    # We won't use the quote_dict except to get a most recent available date,
+    # but this call will cache the data and read from the web if requested.
     quote_dict = quotes.read_all_quotes(inv.Symbol.unique(),
                                         conf('skip_symbol_downloads'),
                                         refresh_cache)
     max_date = max((q.index.max() for q in quote_dict.values()))
     log.info(f"The most recent quote is from {max_date}")
 
-    index = pd.date_range(start=inv['Date'].min(),  end=max_date, freq='D')
+    index = pd.date_range(start=inv['Date'].min(), end=max_date, freq='D')
     accounts = {}
     all_accounts = init_portfolio(index)
     for idx, row in inv.iterrows():
         if row['Account'] not in accounts:
             accounts[row['Account']] = init_portfolio(index)
-        record_action(all_accounts, row, quote_dict)
-        record_action(accounts[row['Account']], row, quote_dict)
-    total_portfolio(all_accounts, quote_dict)
+        record_action(all_accounts, row)
+        record_action(accounts[row['Account']], row)
+    total_portfolio(all_accounts)
     for acct in accounts.values():
-        total_portfolio(acct, quote_dict)
+        total_portfolio(acct)
 
     max_trans_date = None
     portfolio_transactions = read_portfolio_transactions(
@@ -293,10 +288,11 @@ def refresh_portfolio(refresh_cache=False):
     all_accounts['_total'] += all_accounts['cash']
 
     for symbol in conf('symbols_to_simulate'):
-        log.info('Simulating all transactions as %s.', symbol)
+        max_date = all_accounts.index.max()
+        log.info(f'Simulating all transactions as {symbol}.')
         name = f'Simulated {symbol} All-Account'
         accounts[name] = create_simulated_portfolio(
-            inv, portfolio_transactions, quote_dict, symbol)
+            inv, portfolio_transactions, max_date, symbol)
 
     log.info("The most recent transaction was on %s", max_trans_date)
 
