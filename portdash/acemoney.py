@@ -155,7 +155,14 @@ def record_trans(portfolio: pd.DataFrame, transactions: pd.DataFrame) -> pd.Data
     # A "Category" which starts with "Dividend" is an investment transaction
     transactions = (transactions[~transactions['Category']
                     .str.startswith('Dividend').fillna(False)])
+    max_date = portfolio.index.max()
     for i, row in transactions.iterrows():
+        if row['Date'] > max_date:
+            # Ignore transactions which might come after the end of the
+            # period under consideration.
+            # Assume that the transaction dates are always greater than
+            # the minimum date (this should be handled in initialization).
+            continue
         dep, wd = row['Deposit'], row['Withdrawal']  # Alias for convenience
         is_internal = ((row['Category'] in ["Other Income:Interest", "Mail and Paper Work"]) or
                        (pd.isnull(row['Category']) and pd.isnull(row['Payee'])))
