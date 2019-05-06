@@ -1,11 +1,15 @@
 """Read transaction logs from AceMoney
+
+An investment Action from AceMoney has fields
+"Date", "Action", "Symbol", "Account", "Dividend", "Price",
+"Quantity", "Commission", "Total", "Comment"
 """
 import argparse
 from datetime import datetime
 import logging
 import os
 import pickle
-from typing import Dict, Union
+from typing import Dict
 
 import pandas as pd
 import numpy as np
@@ -63,58 +67,6 @@ def record_action(portfolio: pd.DataFrame, action: pd.Series) -> pd.DataFrame:
     return portfolio
 
 
-def convert_action(action: pd.Series,
-                   to_symbol: str,
-                   ignore_commission: bool=False) -> Union[pd.Series, None]:
-    """For simulated portfolios
-
-    Convert an action on one security to an action on another security.
-    Filter out any reinvestment actions.
-    If the action is a distribution, then instead sell an equivalent
-    quantity of the new security -- the original portfolio has actions
-    (such as purchases or withdrawals) which assume that cash is present.
-    """
-    action = action.copy()
-    if ignore_commission:
-        raise NotImplementedError()
-
-    if action['Action'] in ['Reinvest Dividend', 'Reinvest L-Term CG Dist',
-                            'Reinvest S-Term CG Dist']:
-        if action['Total']:
-            log.warning(f"Unexpected nonzero total in action: {action}")
-        return
-    skip_comment_flags = ['__dividend__', '__split__', '__merger__']
-    if not pd.isnull(action['Comment']) and any(
-          [f in action['Comment'] for f in skip_comment_flags]):
-        if action['Total']:
-            log.warning(f"Unexpected nonzero total in action: {action}")
-        return
-
-    from_symbol = action['Symbol']
-    from_price = quotes.get_price(from_symbol, [action.Date]).values[0]
-    to_price = quotes.get_price(to_symbol, [action.Date]).values[0]
-
-    action['Symbol'] = to_symbol
-    if action['Action'] in ['Buy', 'Sell']:
-        action['Quantity'] = (action['Total'] - action['Commission']) / to_price
-        action['Price'] = to_price
-    elif action['Action'] in ['Add Shares', 'Remove Shares']:
-        new_qty = action['Quantity'] * from_price / to_price
-        action['Quantity'] = new_qty
-    elif action['Action'] in ['Dividend']:
-        # If I didn't auto-reinvest a dividend, "sell" simulated shares at
-        # zero commission. I'll do something else with that money soon.
-        action['Action'] = 'Sell'
-        action['Price'] = to_price
-        action['Quantity'] = action['Total'] / to_price
-        action['Dividend'] = np.nan
-        action['Commission'] = 0.
-    else:
-        raise RuntimeError(f"Encountered action {action['Action']}")
-
-    return action
-
-
 def add_sim_dividend(portfolio: pd.DataFrame, sim_symbol: str) -> pd.DataFrame:
     """Look at a portfolio and add the dividends that you would have gotten
     from a particular security. For simulated portfolios.
@@ -145,6 +97,18 @@ def total_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
         portfolio[f"{symbol}_value"] = portfolio[symbol] * price
         portfolio['_total'] += portfolio[f"{symbol}_value"]
     return portfolio
+
+
+def get_deposits(portfolio: pd.DataFrame) -> pd.Series:
+    """Return a Series indicating when money was deposited into or
+    withdrawn from this account. This uses the cumulative contributions
+    and cumulative withdrawals columns invthe portfolio.
+    """
+    deposits = (portfolio['contributions'].diff() -
+                portfolio['withdrawals'].diff())
+    deposits.loc[portfolio.index.min()] = (portfolio['contributions'].iloc[0] -
+                                           portfolio['withdrawals'].iloc[0])
+    return deposits
 
 
 def record_trans(portfolio: pd.DataFrame, transactions: pd.DataFrame) -> pd.DataFrame:
@@ -205,30 +169,35 @@ def make_dummy_prices(symbol: str, prototype_symbol: str, value: float = 1):
     prototype_quotes.to_csv(fname_new, index=True, header=True)
 
 
-def create_simulated_portfolio(investment_tranactions: pd.DataFrame,
-                               port_trans: Dict[str, pd.DataFrame],
-                               max_date: pd.datetime,
-                               sim_symbol: str='SWPPX') -> pd.DataFrame:
-    inv = investment_tranactions
-    min_port = min(p['Date'].min() for p in port_trans.values())
-    index = pd.date_range(start=min(inv['Date'].min(), min_port),
-                          end=max_date, freq='D')
-    sim_acct = init_portfolio(index)
-    for idx, row in inv.iterrows():
-        if sim_symbol and row['Symbol'] not in ['SWXXX']:
-            # SWXXX is a money market fund; used like cash
-            row = convert_action(row, sim_symbol)
-        if row is None:
-            continue
-        record_action(sim_acct, row)
-    sim_acct = add_sim_dividend(sim_acct, sim_symbol)
-    total_portfolio(sim_acct)
+def create_simulated_portfolio(portfolio: pd.DataFrame,
+                               sim_symbol: str = 'SWPPX') -> pd.DataFrame:
+    """Given a portfolio, create a parallel portfolio which has
+    all of the same contributions and withdrawals. In the parallel
+    simulated portfolio, all contributions are immediately used to
+    purchase the security indicated by the `sim_symbol`, and all
+    withdrawals are financed by selling this security.
+    """
+    sim_port = init_portfolio(portfolio.index)
+    prices = quotes.get_price(sim_symbol, sim_port.index)
+    for column in ['contributions', 'withdrawals']:
+        sim_port[column] = portfolio[column].copy()
 
-    for acct_name, trans in port_trans.items():
-        record_trans(sim_acct, trans)
-    sim_acct['_total'] += sim_acct['cash']
+    deposits = get_deposits(portfolio)
+    for date, amt in deposits[deposits != 0].iteritems():
+        action = pd.Series(
+            {"Date": date, "Action": ("Buy" if amt > 0 else "Sell"),
+             "Symbol": sim_symbol, "Account": None, "Dividend": 0.,
+             "Price": prices.loc[date],
+             "Quantity": np.abs(amt) / prices.loc[date], "Commission": 0,
+             "Total": 0, "Comment": ""})
+        record_action(sim_port, action)
 
-    return sim_acct
+    # We've recorded simulated purchases, but the simulated security
+    # would also have generated dividends.
+    sim_port = add_sim_dividend(sim_port, sim_symbol)
+    total_portfolio(sim_port)
+
+    return sim_port
 
 
 def read_investment_transactions(fname: str=None) -> pd.DataFrame:
@@ -281,6 +250,7 @@ def refresh_portfolio(refresh_cache: bool=False):
                           end=max_date, freq='D')
     accounts = {}
     all_accounts = init_portfolio(index)
+    log.info('Logging investment transactions for all portfolios.')
     for idx, row in inv.iterrows():
         if row['Account'] not in accounts:
             accounts[row['Account']] = init_portfolio(index)
@@ -306,11 +276,9 @@ def refresh_portfolio(refresh_cache: bool=False):
     all_accounts['_total'] += all_accounts['cash']
 
     for symbol in conf('symbols_to_simulate'):
-        max_date = all_accounts.index.max()
         log.info(f'Simulating all transactions as {symbol}.')
         name = f'Simulated {symbol} All-Account'
-        accounts[name] = create_simulated_portfolio(
-            inv, portfolio_transactions, max_date, symbol)
+        accounts[name] = create_simulated_portfolio(all_accounts, symbol)
 
     log.info("The most recent transaction was on %s", max_trans_date)
 
