@@ -102,12 +102,11 @@ def total_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
 def get_deposits(portfolio: pd.DataFrame) -> pd.Series:
     """Return a Series indicating when money was deposited into or
     withdrawn from this account. This uses the cumulative contributions
-    and cumulative withdrawals columns invthe portfolio.
+    and cumulative withdrawals columns in the portfolio.
     """
     deposits = (portfolio['contributions'].diff() -
                 portfolio['withdrawals'].diff())
-    deposits.loc[portfolio.index.min()] = (portfolio['contributions'].iloc[0] -
-                                           portfolio['withdrawals'].iloc[0])
+    deposits.loc[portfolio.index.min()] = portfolio['_total'].iloc[0]
     return deposits
 
 

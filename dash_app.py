@@ -1,11 +1,13 @@
 import argparse
 from datetime import timedelta
 from functools import lru_cache
+from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
 
 from portdash.config import conf, load_config
+from portdash.acemoney import create_simulated_portfolio
 import portdash.database as db
 
 import dash
@@ -40,6 +42,9 @@ app.layout = html.Div(children=[
                           for k, v in conf('lines').items()],
                  multi=True,
                  value=['_total:1']),
+    html.Div(["Input symbol for counterfactual:",
+              dcc.Input(id='sim-input', type='text'),
+              html.Button(id='sim-submit', children='Submit', n_clicks=0)]),
     html.Div([
         dcc.RadioItems(
             id='date-range',
@@ -60,6 +65,7 @@ app.layout = html.Div(children=[
             options=[
                 {'label': 'Sum accounts', 'value': 'sum'},
                 {'label': 'Compare accounts', 'value': 'compare'},
+                {'label': 'Counterfactual account', 'value': 'sim'},
             ],
             value='sum',
             labelStyle={'display': 'inline-block'},
@@ -124,7 +130,7 @@ def relative_gain(account, n_days, annualize=False, ignore_zeros=False):
     return avg_pct_change
 
 
-def get_start_time(date_range, max_range):
+def get_start_time(date_range: str, max_range: pd.datetime) -> pd.datetime:
     today = pd.datetime.today()
     if date_range == 'max':
         return max_range
@@ -138,7 +144,8 @@ def get_start_time(date_range, max_range):
         return today - pd.Timedelta(val * 365, 'D')
 
 
-def get_stop_time(date_range, max_range):
+def get_stop_time(date_range: str,
+                  max_range: pd.datetime) -> Union[pd.datetime, None]:
     if date_range == 'max':
         # Show the day of the last withdrawal, but no further.
         return max_range + pd.Timedelta(1, 'D')
@@ -146,23 +153,25 @@ def get_stop_time(date_range, max_range):
         return None
 
 
-def get_nonzero_range(trace):
+def get_nonzero_range(trace: pd.Series) -> Tuple[pd.datetime, pd.datetime]:
     trace_gt0 = trace[trace > 0.02]
     return trace_gt0.index.min(), trace_gt0.index.max()
 
 
-def total_rate_of_return(account_names, start_date, stop_date):
-    return _total_ror(tuple(sorted(account_names)), start_date, stop_date)
+def total_rate_of_return(account_names, start_date, stop_date, sim_symbol=None):
+    return _total_ror(tuple(sorted(account_names)), start_date, stop_date, sim_symbol)
 
 
 @lru_cache(1028)
-def _total_ror(account_names, start_date, stop_date):
+def _total_ror(account_names, start_date, stop_date, sim_symbol=None):
     acct = db.sum_accounts(account_names)
     first_date, last_date = get_nonzero_range(acct['_total'])
     start_date = max([first_date, start_date])
     stop_date = max([min([last_date, stop_date]),
                      start_date + timedelta(days=1)])
     n_days = calc_n_days(start_date, stop_date)
+    if sim_symbol:
+        acct = create_simulated_portfolio(acct.loc[start_date:], sim_symbol)
     y = relative_gain(acct.loc[:stop_date], n_days,
                       annualize=True, ignore_zeros=True)
     return y.iloc[-1]
@@ -184,9 +193,43 @@ def calculate_traces(account_names, start_time=None, stop_time=None,
     return all_traces.loc[start_time:stop_time]
 
 
-@lru_cache(20)
-def _calculate_traces(account_names):
+def calculate_sim_traces(account_names: Tuple[str], sim_symbol: str,
+                         start_time=None, stop_time=None,
+                         date_range=None) -> pd.DataFrame:
+    """As `calculate_traces`, but return a table of traces for a portfolio
+    which has all of the same purchases and withdrawals as the input accounts,
+    but in which all transactions are for the `sim_symbol` security.
+    """
+    if not account_names or not sim_symbol:
+        raise NoUpdate()
+    if 'All Accounts' in account_names:
+        account_names = db.get_account_names(simulated=False)
+
+    # First get the real account, and cut it to the desired time window.
+    account_names = tuple(sorted(account_names))
+    _, max_range, latest_time = _calculate_traces(account_names)
     acct = db.sum_accounts(account_names)
+
+    start_time = pd.to_datetime(start_time)
+    start_time = start_time or get_start_time(date_range, max_range)
+    stop_time = pd.to_datetime(stop_time)
+    stop_time = stop_time or get_stop_time(date_range, latest_time)
+    acct = acct[start_time:stop_time]
+
+    # Now convert the read portfolio to a simulated portfolio
+    sim_acct = create_simulated_portfolio(acct, sim_symbol=sim_symbol)
+    all_traces, _, _ = _portfolio_to_traces(sim_acct)
+
+    return all_traces.loc[start_time:stop_time]
+
+
+@lru_cache(20)
+def _calculate_traces(account_names: Tuple[str]):
+    acct = db.sum_accounts(account_names)
+    return _portfolio_to_traces(acct)
+
+
+def _portfolio_to_traces(acct: pd.DataFrame):
     all_traces = pd.DataFrame(index=acct.index)
     max_range = all_traces.index.max()
     latest_time = all_traces.index.min()
@@ -292,8 +335,8 @@ def update_value_box(acct_names, min_date, max_date):
     return components
 
 
-def ror_component(acct_names, min_date, max_date, name=None):
-    ror = total_rate_of_return(acct_names, min_date, max_date)
+def ror_component(acct_names, min_date, max_date, name=None, sim_symbol=None):
+    ror = total_rate_of_return(acct_names, min_date, max_date, sim_symbol)
     db_t = np.log(2) / np.log(1 + ror / 100)
     txt_color = "green" if ror > 0 else "red"
     name_span = [html.Span(f"{name}: ")] if name else []
@@ -306,8 +349,11 @@ def ror_component(acct_names, min_date, max_date, name=None):
               [dash.dependencies.Input('portfolio-selector', 'value'),
                dash.dependencies.Input('comparison-selector', 'value'),
                dash.dependencies.Input('date-selector', 'start_date'),
-               dash.dependencies.Input('date-selector', 'end_date')])
-def update_ror_box(acct_names, comp_type, min_date, max_date):
+               dash.dependencies.Input('date-selector', 'end_date'),
+               dash.dependencies.Input('sim-submit', 'n_clicks'),
+               ],
+              [dash.dependencies.State('sim-input', 'value')])
+def update_ror_box(acct_names, comp_type, min_date, max_date, n_clicks, sim_symbol):
     if not acct_names:
         return "..."
     min_date, max_date = pd.to_datetime(min_date), pd.to_datetime(max_date)
@@ -316,6 +362,9 @@ def update_ror_box(acct_names, comp_type, min_date, max_date):
     if comp_type == 'compare':
         for name in acct_names:
             components.append(ror_component([name], min_date, max_date, name))
+    elif comp_type == 'sim':
+        components.append(ror_component(acct_names, min_date, max_date, 'Actual portfolio'))
+        components.append(ror_component(acct_names, min_date, max_date, 'Counterfactual portfolio', sim_symbol))
     else:
         components.append(ror_component(acct_names, min_date, max_date))
 
@@ -344,7 +393,7 @@ def get_layout(axes_used, lines):
 @app.callback(dash.dependencies.Output('line-selector', 'multi'),
               [dash.dependencies.Input('comparison-selector', 'value')])
 def set_line_selector_multi(comp_type):
-    if comp_type == 'compare':
+    if comp_type in ['compare', 'sim']:
         return False
     else:
         return True
@@ -355,11 +404,17 @@ def set_line_selector_multi(comp_type):
                dash.dependencies.Input('line-selector', 'value'),
                dash.dependencies.Input('comparison-selector', 'value'),
                dash.dependencies.Input('date-selector', 'start_date'),
-               dash.dependencies.Input('date-selector', 'end_date')])
-def make_graph(account_names, lines, comp_type, min_date, max_date):
+               dash.dependencies.Input('date-selector', 'end_date'),
+               dash.dependencies.Input('sim-submit', 'n_clicks'),
+               ],
+              [dash.dependencies.State('sim-input', 'value')])
+def make_graph(account_names, lines, comp_type, min_date, max_date, n_clicks, sim_symbol):
     lines = np.atleast_1d(lines)
     if comp_type == 'compare':
         return _make_comparison_graph(account_names, lines, min_date, max_date)
+    elif comp_type == 'sim':
+        return _make_counterfactual_graph(account_names, sim_symbol, lines,
+                                          min_date, max_date)
     else:
         return _make_summed_graph(account_names, lines, min_date, max_date)
 
@@ -385,6 +440,29 @@ def _make_summed_graph(account_names, lines, min_date, max_date):
     return {
         'data': plots,
         'layout': get_layout(axes_used, [conf('lines')[l] for l in lines]),
+    }
+
+
+def _make_counterfactual_graph(account_names, sim_symbol, lines,
+                               min_date, max_date):
+    if not account_names:
+        return None
+
+    all_traces = calculate_traces(account_names, min_date, max_date)
+    line = _standardize_lines(lines)[0]
+    plots = []
+    y = all_traces[line.split(':')[0]]
+    plots.append(go.Scatter(x=y.index, y=y, mode='lines',
+                            name='Actual Portfolio', yaxis='y1'))
+
+    sim_traces = calculate_sim_traces(account_names, sim_symbol, min_date, max_date)
+    y_sim = sim_traces[line.split(':')[0]]
+    plots.append(go.Scatter(x=y_sim.index, y=y_sim, mode='lines',
+                            name='Counterfactual Portfolio', yaxis='y1'))
+
+    return {
+        'data': plots,
+        'layout': get_layout(conf('which_axis')[line], [conf('lines')[line]]),
     }
 
 
