@@ -12,7 +12,7 @@ def init_portfolio(index: pd.DatetimeIndex) -> pd.DataFrame:
                          'contributions': 0., 'withdrawals': 0.}, index=index)
 
 
-def init_symbol(portfolio: pd.DataFrame, symbol) -> pd.DataFrame:
+def init_symbol(portfolio: pd.DataFrame, symbol: str) -> pd.DataFrame:
     if symbol not in portfolio:
         portfolio[symbol] = 0.0
         portfolio[f"{symbol}_value"] = 0.0

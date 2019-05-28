@@ -20,7 +20,8 @@ from portdash.config import conf
 log = logging.getLogger(__name__)
 
 
-def record_action(portfolio: pd.DataFrame, action: pd.Series) -> pd.DataFrame:
+def record_inv_action(portfolio: pd.DataFrame,
+                      action: pd.Series) -> pd.DataFrame:
     """Mark the results of an AceMoney investment transaction in a portfolio
 
     `portfolio`: pd.DataFrame
@@ -28,10 +29,7 @@ def record_action(portfolio: pd.DataFrame, action: pd.Series) -> pd.DataFrame:
     `action`: pd.Series
         A row from the all-investment-transactions AceMoney export
     """
-    if action.Symbol not in portfolio:
-        portfolio[action['Symbol']] = 0.0
-        portfolio[f"{action['Symbol']}_value"] = 0.0
-        portfolio[f"{action['Symbol']}_dist"] = 0.0
+    port.init_symbol(portfolio, symbol=action['Symbol'])
 
     if not pd.isnull(action['Dividend']) and action['Dividend'] != 0:
         portfolio.loc[action.Date:, f"{action.Symbol}_dist"] += action['Dividend']
@@ -58,7 +56,9 @@ def record_action(portfolio: pd.DataFrame, action: pd.Series) -> pd.DataFrame:
     return portfolio
 
 
-def record_trans(portfolio: pd.DataFrame, transactions: pd.DataFrame) -> pd.DataFrame:
+def record_trans(portfolio: pd.DataFrame,
+                 transactions: pd.DataFrame) -> pd.DataFrame:
+    """Insert the contents of an AceMoney account export into a portfolio"""
     # A "Category" with an "@" should be accounted for by
     # investment transactions
     transactions = (transactions[~transactions['Category']
@@ -66,27 +66,38 @@ def record_trans(portfolio: pd.DataFrame, transactions: pd.DataFrame) -> pd.Data
     # A "Category" which starts with "Dividend" is an investment transaction
     transactions = (transactions[~transactions['Category']
                     .str.startswith('Dividend').fillna(False)])
-    max_date = portfolio.index.max()
     for i, row in transactions.iterrows():
-        if row['Date'] > max_date:
-            # Ignore transactions which might come after the end of the
-            # period under consideration.
-            # Assume that the transaction dates are always greater than
-            # the minimum date (this should be handled in initialization).
-            continue
-        dep, wd = row['Deposit'], row['Withdrawal']  # Alias for convenience
-        is_internal = ((row['Category'] in ["Other Income:Interest", "Mail and Paper Work"]) or
-                       (pd.isnull(row['Category']) and pd.isnull(row['Payee'])))
+        record_acct_action(portfolio, row)
+    return portfolio
+
+
+def record_acct_action(portfolio: pd.DataFrame,
+                       action: pd.DataFrame) -> pd.DataFrame:
+    """Mark the results of an AceMoney account transaction in a portfolio
+
+    `portfolio`: pd.DataFrame
+        Initialized as per `init_portfolio`
+    `action`: pd.Series
+        A row from the single account AceMoney export
+    """
+    if action['Date'] <= portfolio.index.max():
+        # Ignore transactions which might come after the end of the
+        # period under consideration.
+        # Assume that the transaction dates are always greater than
+        # the minimum date (this should be handled in initialization).
+        dep, wd = action['Deposit'], action['Withdrawal']  # Alias for convenience
+        is_internal = ((action['Category'] in ["Other Income:Interest", "Mail and Paper Work"]) or
+                       (pd.isnull(action['Category']) and pd.isnull(action['Payee'])))
         if not pd.isnull(wd) and wd != 0:
-            portfolio.loc[row['Date']:, "cash"] -= wd
+            portfolio.loc[action['Date']:, "cash"] -= wd
             if not is_internal:
-                portfolio.loc[row['Date']:, "withdrawals"] += wd
+                portfolio.loc[action['Date']:, "withdrawals"] += wd
         if not pd.isnull(dep) and dep != 0:
-            portfolio.loc[row['Date']:, "cash"] += dep
+            portfolio.loc[action['Date']:, "cash"] += dep
             if not is_internal:
-                portfolio.loc[row['Date']:, "contributions"] += dep
-        if row['Category'] == "Other Income:Interest":
-            portfolio.loc[row['Date']:, "_total_dist"] += dep
+                portfolio.loc[action['Date']:, "contributions"] += dep
+        if action['Category'] == "Other Income:Interest":
+            portfolio.loc[action['Date']:, "_total_dist"] += dep
     return portfolio
 
 
@@ -146,8 +157,8 @@ def refresh_portfolio(refresh_cache: bool=False):
     for idx, row in inv.iterrows():
         if row['Account'] not in accounts:
             accounts[row['Account']] = port.init_portfolio(index)
-        record_action(all_accounts, row)
-        record_action(accounts[row['Account']], row)
+        record_inv_action(all_accounts, row)
+        record_inv_action(accounts[row['Account']], row)
     port.total_portfolio(all_accounts)
     for acct in accounts.values():
         port.total_portfolio(acct)
