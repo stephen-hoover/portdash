@@ -205,3 +205,28 @@ def read_all_quotes(all_symbols: Iterable[str]=None,
     cache_quotes = fetch_all_quotes(skip_downloads, refresh_cache=False)
     return {**quotes, **cache_quotes}
 
+
+def make_dummy_prices(symbol: str, prototype_symbol: str, value: float = 1):
+    """Read the quotes for the prototype symbol, and replace all
+    prices with the `value`.
+
+    I can run it by hand once, then be done with it.
+    """
+    fname_prototype = os.path.join(conf('cache_dir'), f'{prototype_symbol}.csv')
+    fname_new = os.path.join(conf('cache_dir'), f'{symbol}.csv')
+    reader_kwargs = {'index_col': 0, 'parse_dates': True,
+                     'infer_datetime_format': True}
+    prototype_quotes = pd.read_csv(fname_prototype, **reader_kwargs)
+
+    set_to_value = ['open', 'high', 'low', 'close', 'adjusted_close']
+    set_to_zero = ['volume', 'dividend_amount', 'split_coefficient']
+    remainder = set(prototype_quotes) - set(set_to_value) - set(set_to_zero)
+    if remainder:
+        raise RuntimeError(f"Unable to reset columns {remainder}")
+    for col in set_to_value:
+        prototype_quotes[col] = value
+    for col in set_to_zero:
+        prototype_quotes[col] = 0.
+
+    log.info("Wrote file to %s", fname_new)
+    prototype_quotes.to_csv(fname_new, index=True, header=True)

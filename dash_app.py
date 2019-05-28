@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from portdash.config import conf, load_config
-from portdash.acemoney import create_simulated_portfolio
+from portdash.simulation import create_simulated_portfolio
 import portdash.database as db
 
 import dash
