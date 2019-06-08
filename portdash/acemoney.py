@@ -200,8 +200,10 @@ if __name__ == '__main__':
                         help="Refresh historical quotes from Alpha Vantage")
     parser.add_argument('-c', '--conf', required=True,
                         help="Configuration file in YAML format")
+    parser.add_argument('-v', '--verbose', action='store_true', default=False,
+                        help="Output verbose logs.")
     args = parser.parse_args()
 
-    logging.basicConfig(level='INFO')
+    logging.basicConfig(level=('DEBUG' if args.verbose else 'INFO'))
     config.load_config(args.conf)
     _ = refresh_portfolio(refresh_cache=args.quotes)
