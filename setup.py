@@ -13,6 +13,7 @@ def main():
             'pandas',
             'numpy',
             'dash',
+            'requests',
         ],
     )
 
