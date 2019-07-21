@@ -30,22 +30,42 @@ app = dash.Dash(name="portfolio_dashboard")
 app.title = "Portfolio Dashboard"
 
 app.layout = html.Div(children=[
-    dcc.Dropdown(id='portfolio-selector',
-                 options=[{'label': n, 'value': n}
-                          for n in db.get_account_names()] +
-                         [{'label': 'All Accounts', 'value': 'All Accounts'}],
-                 multi=True,
-                 placeholder='Select an account',
-                 value=['All Accounts']),
-    dcc.Dropdown(id='line-selector',
-                 options=[{'label': v, 'value': k}
-                          for k, v in conf('lines').items()],
-                 multi=True,
-                 value=['_total:1']),
-    html.Div(["Input symbol for counterfactual:",
-              dcc.Input(id='sim-input', type='text'),
-              html.Button(id='sim-submit', children='Submit', n_clicks=0)]),
     html.Div([
+        html.Div([
+            html.H4('Account(s) to display',
+                    style={'margin-bottom': 0, 'margin-top': 0}),
+            dcc.Dropdown(id='portfolio-selector',
+                         options=[{'label': n, 'value': n}
+                                  for n in db.get_account_names()] +
+                                 [{'label': 'All Accounts',
+                                   'value': 'All Accounts'}],
+                         multi=True,
+                         placeholder='Select an account',
+                         value=['All Accounts']),
+            ], style={'text-align': 'left'}),
+        html.Div([
+            html.H4('Value to chart',
+                    style={'margin-bottom': 0, 'margin-top': 0}),
+            dcc.Dropdown(id='line-selector',
+                         options=[{'label': v, 'value': k}
+                                  for k, v in conf('lines').items()],
+                         multi=True,
+                         value=['_total:1']),
+            ], style={'text-align': 'right'}),
+    ], style={'columnCount': 2}),
+    html.Div([
+        dcc.RadioItems(
+            id='comparison-selector',
+            className='six columns',
+            options=[
+                {'label': 'Sum accounts', 'value': 'sum'},
+                {'label': 'Compare accounts', 'value': 'compare'},
+                {'label': 'Counterfactual account', 'value': 'sim'},
+            ],
+            value='sum',
+            labelStyle={'display': 'inline-block'},
+            style={'text-align': 'left'},
+        ),
         dcc.RadioItems(
             id='date-range',
             className='six columns',
@@ -58,20 +78,14 @@ app.layout = html.Div(children=[
             ],
             value='ytd',
             labelStyle={'display': 'inline-block'},
-        ),
-        dcc.RadioItems(
-            id='comparison-selector',
-            className='six columns',
-            options=[
-                {'label': 'Sum accounts', 'value': 'sum'},
-                {'label': 'Compare accounts', 'value': 'compare'},
-                {'label': 'Counterfactual account', 'value': 'sim'},
-            ],
-            value='sum',
-            labelStyle={'display': 'inline-block'},
             style={'text-align': 'right'},
         ),
-    ], className='row'),
+    ], className='row', style={'columnCount': 2}),
+    html.Div(["Input symbol for counterfactual:",
+              dcc.Input(id='sim-input', type='text'),
+              html.Button(id='sim-submit', children='Submit', n_clicks=0)],
+             id='sim-selector-container', hidden=True,
+             style={'text-align': 'left'}),
     html.Hr(style={'margin-bottom': 0, 'margin-top': 0}),
     html.Div([
         html.Div([dcc.DatePickerRange(id='date-selector',
@@ -85,7 +99,7 @@ app.layout = html.Div(children=[
                  className='six columns',
                  style={'text-align': 'right'})
     ],
-        className='row', style={'margin-top': 0}),
+        className='row', style={'margin-top': 0, 'columnCount': 2}),
     html.Hr(style={'margin-top': 0}),
     dcc.Graph(id='portfolio-value'),
     html.Div(id='cache', style={'display': 'none'}),
@@ -99,6 +113,13 @@ app.layout = html.Div(children=[
 class NoUpdate(Exception):
     """Raise this exception to prevent component updates"""
     pass
+
+
+@app.callback(dash.dependencies.Output('sim-selector-container', 'hidden'),
+              [dash.dependencies.Input('comparison-selector', 'value')])
+def counterfactual_picker_visibility(comp_selector):
+    """Hide the component unless it's relevant"""
+    return comp_selector != 'sim'
 
 
 def calc_n_days(start_time, stop_time):
