@@ -10,7 +10,7 @@ from typing import Dict, Iterable, Sequence, Tuple, Union
 import pandas as pd
 import requests
 
-from portdash.config import conf
+from config import conf
 
 log = logging.getLogger(__name__)
 

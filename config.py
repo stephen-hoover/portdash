@@ -70,3 +70,8 @@ def conf(key: str):
 
 def get_config() -> Dict:
     return CONF_STATE
+
+
+class BaseConfig:
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False

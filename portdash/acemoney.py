@@ -13,9 +13,10 @@ from typing import Dict
 
 import pandas as pd
 
-from portdash import config, quotes, simulation
+import config
+from config import conf
 from portdash import portfolio as port
-from portdash.config import conf
+from portdash import quotes, simulation
 
 log = logging.getLogger(__name__)
 
