@@ -1,9 +1,11 @@
+import logging
 import os
-from typing import Dict
+from typing import Any, Dict
 
 import yaml
 
-INSTALL_DIR = os.path.split(os.path.dirname(__file__))[0]
+log = logging.getLogger(__name__)
+INSTALL_DIR = os.path.dirname(__file__)
 
 # Global state for app configuration, pre-set with defaults
 CONF_STATE = {
@@ -64,14 +66,28 @@ def update_config(config_dict) -> None:
         CONF_STATE['av_api_key'] = os.getenv('AV_API_KEY')
 
 
-def conf(key: str):
+def conf(key: str) -> Any:
     return CONF_STATE[key]
+
+
+def get_database_fname() -> str:
+    """Get absolute filename from a possibly relative filename.
+    Relative filenames refer to the package base directory.
+    """
+    fname = os.environ.get('DATABASE_URI') or conf('database_uri')
+    if fname == os.path.basename(fname):
+        fname = os.path.join(INSTALL_DIR, fname)
+    return fname
 
 
 def get_config() -> Dict:
     return CONF_STATE
 
 
-class BaseConfig:
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+def get_server_config():
+    db_uri = get_database_fname()
+    if not db_uri.startswith('sqlite'):
+        db_uri = f'sqlite:///{db_uri}'
+    log.debug(f'Setting database URI to {db_uri}')
+    return {'SQLALCHEMY_DATABASE_URI': db_uri,
+            'SQLALCHEMY_TRACK_MODIFICATIONS': False}

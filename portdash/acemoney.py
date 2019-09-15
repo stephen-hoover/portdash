@@ -16,7 +16,8 @@ import pandas as pd
 import config
 from config import conf
 from portdash import portfolio as port
-from portdash import quotes, simulation
+from portdash import create_app
+from portdash.apis import quotes
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ def record_inv_action(portfolio: pd.DataFrame,
         value = (quotes.get_price(action.Symbol, [action.Date]).values[0] *
                  action['Quantity'])
         log.debug(f"Dividend of {action.Quantity} shares of {action.Symbol} "
-                  f"is ${value}.")
+                  f"of {action.Date} is ${value}.")
         portfolio.loc[action.Date:, f"{action.Symbol}_dist"] += value
         portfolio.loc[action.Date:, f"_total_dist"] += value
 
@@ -141,12 +142,10 @@ def refresh_portfolio(refresh_cache: bool=False):
     portfolio_transactions = read_portfolio_transactions(
         conf('account_transactions'))
     # Read all the quotes either from disk or from the web.
-    # We won't use the quote_dict except to get a most recent available date,
-    # but this call will cache the data and read from the web if requested.
-    quote_dict = quotes.read_all_quotes(inv.Symbol.unique(),
-                                        conf('skip_symbol_downloads'),
-                                        refresh_cache)
-    max_date = max((q.index.max() for q in quote_dict.values()))
+    if refresh_cache:
+        quotes.refresh_quotes(inv.Symbol.unique(),
+                              conf('skip_symbol_downloads'))
+    max_date = quotes.get_max_date()
     log.info(f"The most recent quote is from {max_date}")
 
     min_port = min(p['Date'].min() for p in portfolio_transactions.values())
@@ -179,12 +178,6 @@ def refresh_portfolio(refresh_cache: bool=False):
             max_trans_date = max((max_trans_date, trans['Date'].max()))
     all_accounts['_total'] += all_accounts['cash']
 
-    for symbol in conf('symbols_to_simulate'):
-        log.info(f'Simulating all transactions as {symbol}.')
-        name = f'Simulated {symbol} All-Account'
-        accounts[name] = simulation.create_simulated_portfolio(all_accounts,
-                                                               symbol)
-
     log.info("The most recent transaction was on %s", max_trans_date)
 
     with open(conf('etl_accts'), 'wb') as _fout:
@@ -207,4 +200,10 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=('DEBUG' if args.verbose else 'INFO'))
     config.load_config(args.conf)
-    _ = refresh_portfolio(refresh_cache=args.quotes)
+
+    server = create_app()
+
+    with server.app_context():
+        from portdash.extensions import db
+        db.create_all()
+        _ = refresh_portfolio(refresh_cache=args.quotes)

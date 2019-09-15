@@ -4,8 +4,7 @@ from portdash.extensions import db
 class Security(db.Model):
     __tablename__ = 'securities'
 
-    id = db.Column(db.Integer, primary_key=True)
-    symbol = db.Column(db.String(10), unique=True, nullable=False)
+    symbol = db.Column(db.String(10), primary_key=True)
     name = db.Column(db.String(150), nullable=True)
 
     def __repr__(self):

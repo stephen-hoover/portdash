@@ -5,7 +5,7 @@ If you'd done something different, what would your portfolio look like?
 import pandas as pd
 import numpy as np
 
-from portdash import quotes
+from portdash.apis import quotes
 from portdash import portfolio as port
 
 

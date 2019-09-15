@@ -1,6 +1,6 @@
 import pandas as pd
 
-from portdash import quotes
+from portdash.apis import quotes
 
 
 def init_portfolio(index: pd.DatetimeIndex) -> pd.DataFrame:

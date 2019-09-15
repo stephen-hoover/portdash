@@ -17,7 +17,7 @@ import pandas as pd
 import yaml
 
 import config
-from portdash import quotes
+from portdash.apis import quotes
 
 TRANS_HEADER = ["Date", "Action", "Symbol", "Account", "Dividend",
                 "Price", "Quantity", "Commission", "Total", "Comment"]

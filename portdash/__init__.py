@@ -2,12 +2,12 @@ import dash
 from flask import Flask
 from flask.helpers import get_root_path
 
-from config import BaseConfig
+from config import get_server_config
 
 
 def create_app():
     server = Flask(__name__)
-    server.config.from_object(BaseConfig)
+    server.config.from_mapping(get_server_config())
 
     register_dashapps(server)
     register_extensions(server)
