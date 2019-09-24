@@ -28,8 +28,8 @@ from typing import Dict, Tuple
 
 import pandas as pd
 
+from config import conf
 from portdash import acemoney as processing
-from portdash.config import conf
 
 
 @lru_cache(5)

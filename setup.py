@@ -14,6 +14,9 @@ def main():
             'numpy',
             'dash',
             'requests',
+            'flask',
+            'flask-sqlalchemy',
+            'flask-migrate',
         ],
     )
 

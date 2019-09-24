@@ -14,3 +14,7 @@ data/
 
 *.yaml
 !example_config.yaml
+
+# Local database
+app.db
+migrations
