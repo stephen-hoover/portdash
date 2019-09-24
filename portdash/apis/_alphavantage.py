@@ -3,6 +3,7 @@
 from datetime import datetime
 import io
 import logging
+import re
 import time
 
 import pandas as pd
@@ -92,7 +93,9 @@ class AlphaVantageClient(metaclass=Singleton):
         response.raise_for_status()
         if AlphaVantageClient.error_msg in response.content[:200]:
             msg = response.json()['Error Message']
-            raise InvalidAPICall(f'Error fetching {symbol}: {msg}')
+            # Include the web API call in the error msg, but mask the API key
+            addr = re.sub(r'&apikey=[^&]+', r'&apikey=****', response.url)
+            raise InvalidAPICall(f'Error fetching {symbol} from {addr}: {msg}')
 
     def historical_quotes(self, symbol: str,
                           start_time: datetime=None) -> pd.DataFrame:

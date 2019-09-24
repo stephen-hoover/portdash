@@ -15,7 +15,7 @@ class Quote(db.Model):
     date = db.Column(db.Date, nullable=False)
     price = db.Column(db.Float, nullable=False)
     volume = db.Column(db.Float, nullable=True)
-    # NB: Update `insert_prices` when adding new data columns
+    # NB: Update `insert` method when adding new data columns
 
     symbol = db.Column(db.Integer, db.ForeignKey('securities.symbol'),
                        nullable=False)
@@ -83,7 +83,29 @@ class Quote(db.Model):
     def get_price(cls,
                   symbol: str,
                   index: Union[pd.DatetimeIndex,
-                               Sequence[pd.datetime]]=None) -> pd.Series:
+                               Sequence[pd.datetime]]=None,
+                  default: float=None) -> pd.Series:
+        """Retrieve a Series of prices for the requested security
+
+        Parameters
+        ----------
+        symbol:
+            Return prices for this security.
+        index:
+            If provided, use this as the index of the returned Series,
+            returning prices only at those times.
+        default:
+            If the requested security does not exist in the database,
+            return this value as the price for all requested times.
+            Provide `None` to raise an error on a missing security.
+            If no index is provided, the returned Series will have one
+            entry for 2015-01-01.
+
+        Returns
+        -------
+        pd.Series
+            A Series of float prices with a DatetimeIndex
+        """
         df = pd.read_sql(sql=(db.session
                               .query(cls)
                               .filter(cls.symbol == symbol)
@@ -92,6 +114,13 @@ class Quote(db.Model):
                          con=db.engine,
                          parse_dates=['date'],
                          index_col='date')
+        if not len(df):
+            if default is None:
+                raise RuntimeError(f'Unable to find {symbol} in the database.')
+            log.debug(f'Unable to find quotes for {symbol} in the '
+                      f'database. Filling with {default}.')
+            df = pd.DataFrame({'price': [default]},
+                              index=pd.DatetimeIndex(['2015-01-01']))
         if index is not None:
             # Use "ffill" to take us through e.g. weekends. Use bfill to
             # make sure that we have valid prices at

@@ -179,11 +179,32 @@ def refresh_portfolio(refresh_cache: bool=False):
     all_accounts['_total'] += all_accounts['cash']
 
     log.info("The most recent transaction was on %s", max_trans_date)
+    _check_account_dict(accounts)
 
     with open(conf('etl_accts'), 'wb') as _fout:
         pickle.dump((accounts, max_trans_date.date()), _fout)
 
     return accounts, max_trans_date.date()
+
+
+def _check_account_dict(accts: Dict[str, pd.DataFrame]):
+    """Raise a RuntimeError if any account in the input dictionary has nulls"""
+    err_msgs = [(acct_name, _check_account(acct))
+                for acct_name, acct in accts.items()]
+    msg = '\n'.join(f'Missing values found in {acct_name}:\n{msg}'
+                    for acct_name, msg in err_msgs if msg)
+    if msg:
+        raise RuntimeError(msg)
+
+
+def _check_account(acct: pd.DataFrame) -> str:
+    """Return an error message if the input account has any nulls."""
+    msg = []
+    for col in acct:
+        n_null = pd.isnull(acct[col]).sum()
+        if n_null:
+            msg.append(f'Column {col} has {n_null} missing values.')
+    return '\n'.join(msg)
 
 
 if __name__ == '__main__':

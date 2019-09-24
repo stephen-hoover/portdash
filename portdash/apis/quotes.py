@@ -1,4 +1,5 @@
-"""Fetch quotes from web APIs
+"""This module provides an interface for the application to get
+information about prices and dividends for securities.
 """
 from datetime import datetime, timedelta, time
 import logging
@@ -7,8 +8,7 @@ from typing import Iterable, Sequence, Union
 import pandas as pd
 
 from portdash.models import Distribution, Quote
-from portdash.apis._alphavantage import AlphaVantageClient
-from config import conf
+from portdash.apis._alphavantage import fetch_from_web, InvalidAPICall
 
 log = logging.getLogger(__name__)
 
@@ -37,11 +37,25 @@ def get_dividend(symbol: str,
 
 
 def get_max_date() -> datetime:
+    """Return the datetime of the most recent quote"""
     return datetime.combine(Quote.most_recent().date, time.min)
 
 
 def refresh_quotes(all_symbols: Iterable[str]=None,
                    skip_downloads: Iterable[str]=None):
+    """Update all quotes and distributions
+
+    Parameters
+    ----------
+    all_symbols:
+        Update quotes and dividends for these securities if they're already
+        in the database, or download all available historical data if the
+        securities aren't in the database. Default to updating everything
+        currently in the database.
+    skip_downloads:
+        If provided, don't try to update these securities. Most useful
+        when updating all securities in the database.
+    """
     skip_downloads = skip_downloads or []
     if all_symbols is None:
         log.info('Reading all quotes in database.')
@@ -52,29 +66,27 @@ def refresh_quotes(all_symbols: Iterable[str]=None,
     symbols_to_download = set(all_symbols) - set(skip_downloads)
 
     for symbol in symbols_to_download:
+        # Determine if we need to update, based on the most recent data.
+        # We won't get quotes more often than daily.
         last_quote = getattr(Quote.most_recent(symbol), 'date', None)
         if last_quote:
-            last_quote = datetime.combine(last_quote, time.min)
+            last_quote = datetime.combine(last_quote, time.max)
             quotes_are_stale = (datetime.today() - last_quote >
                                 timedelta(days=1))
         else:
             quotes_are_stale = True
 
+        # Retrieve new quotes and insert into the database.
         if quotes_are_stale:
             _start = (None if last_quote is None else
                       last_quote + timedelta(days=1))
             log.debug(f"Fetching new quotes for {symbol}. "
                       f"Last quote: {last_quote}.")
-            new_quotes = (_fetch_from_web(symbol, start_time=_start)
-                          .rename(columns={'close': 'price',
-                                           'dividend_amount': 'amount'}))
-            Quote.insert(new_quotes, symbol=symbol)
-            Distribution.insert(new_quotes, symbol=symbol)
-
-
-def _fetch_from_web(symbol: str, start_time: datetime) -> pd.DataFrame:
-    log.info(f'Reading {symbol} data from Alpha Vantage.')
-    client = AlphaVantageClient(conf('av_api_key'))
-    new_quotes = client.historical_quotes(symbol, start_time=start_time)
-
-    return new_quotes
+            try:
+                new_quotes = (fetch_from_web(symbol, start_time=_start)
+                              .rename(columns={'close': 'price',
+                                               'dividend_amount': 'amount'}))
+                Quote.insert(new_quotes, symbol=symbol)
+                Distribution.insert(new_quotes, symbol=symbol)
+            except InvalidAPICall:
+                log.exception(f'Unable to fetch quotes for {symbol}')
