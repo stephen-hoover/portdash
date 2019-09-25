@@ -5,12 +5,15 @@ import io
 import logging
 import re
 import time
+from typing import Dict
 
 import pandas as pd
 import requests
 
 from config import conf
 
+__all__ = ['AlphaVantageClient', 'fetch_from_web', 'APICallsExceeded',
+           'InvalidAPICall', 'UnknownSymbol']
 log = logging.getLogger(__name__)
 
 QUOTE_COLS = ['timestamp', 'open', 'high', 'low', 'close', 'adjusted_close',
@@ -26,6 +29,19 @@ class APICallsExceeded(RuntimeError):
 
 class InvalidAPICall(RuntimeError):
     pass
+
+
+class UnknownSymbol(RuntimeError):
+    def __init__(self, symbol, matches):
+
+        # Each key in the blobs is prefixed by a number and a space,
+        # e.g. "2. type". Strip the number.
+        self.matches = [{' '.join(k.split()[1:]): v for k, v in obj.items()}
+                        for obj in matches]
+        self.symbol = symbol
+        msg = (f"Unable to find match for {symbol}. "
+               f"Best matches: \n{self.matches}")
+        super().__init__(msg)
 
 
 class Singleton(type):
@@ -97,6 +113,17 @@ class AlphaVantageClient(metaclass=Singleton):
             addr = re.sub(r'&apikey=[^&]+', r'&apikey=****', response.url)
             raise InvalidAPICall(f'Error fetching {symbol} from {addr}: {msg}')
 
+    def _query(self, web_addr, symbol):
+        """Handle all API interactions through here so we can keep track of
+        how often we're hitting the API.
+        """
+        self._wait_until_available()
+        self._last_query = datetime.now()
+        self._n_queries += 1
+        response = requests.get(web_addr)
+        self._check_and_raise(response, symbol)
+        return response
+
     def historical_quotes(self, symbol: str,
                           start_time: datetime=None) -> pd.DataFrame:
         """Return a table of historical security valuations
@@ -120,7 +147,6 @@ class AlphaVantageClient(metaclass=Singleton):
             log.debug('No update needed; the requested start '
                       'date is in the future.')
             pd.DataFrame(columns=QUOTE_COLS)
-        self._wait_until_available()
         if start_time is None:
             start_time = MIN_TIME
 
@@ -132,13 +158,42 @@ class AlphaVantageClient(metaclass=Singleton):
             log.debug("Making full query")
         web_addr = AlphaVantageClient.AV_API.format(
             symbol=symbol, size=size, api_key=conf('av_api_key'))
-        self._last_query = datetime.now()
-        self._n_queries += 1
-        response = requests.get(web_addr)
-        self._check_and_raise(response, symbol)
+        response = self._query(web_addr, symbol)
 
         quotes = pd.read_csv(io.BytesIO(response.content), **CSV_READER_KWARGS)
         return quotes[quotes.index >= start_time]
+
+    def symbol_lookup(self, symbol: str) -> Dict[str, str]:
+        """Look up information about a symbol from AlphaVantage.
+
+        See https://www.alphavantage.co/documentation/#symbolsearch
+
+        Parameters
+        ----------
+        symbol:
+            The symbol to retrieve information on.
+
+        Returns
+        -------
+        dict
+            A dictionary which includes keys "symbol", "name", "type",
+            "region", and "currency".
+        """
+        lookup_api = (f'https://www.alphavantage.co/query?'
+                      f'function=SYMBOL_SEARCH'
+                      f'&keywords={symbol}&apikey={self._api_key}')
+        resp = self._query(lookup_api, symbol)
+
+        # The API response is JSON with a "bestMatches" key holding a
+        # list of blobs. We're looking for an exact match on the input symbol.
+        data = [obj for obj in resp.json()['bestMatches'] if
+                obj['1. symbol'] == symbol]
+        if not data:
+            raise UnknownSymbol(symbol, resp.json()['bestMatches'])
+
+        # Each key in the response is prefixed by a number and a space,
+        # e.g. "2. type". Strip the number.
+        return {' '.join(k.split()[1:]): v for k, v in data[0].items()}
 
 
 def fetch_from_web(symbol: str, start_time: datetime) -> pd.DataFrame:

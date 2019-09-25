@@ -8,7 +8,7 @@ from typing import Iterable, Sequence, Union
 import pandas as pd
 
 from portdash.models import Distribution, Quote
-from portdash.apis._alphavantage import fetch_from_web, InvalidAPICall
+from portdash.apis import fetch_from_web, InvalidAPICall
 
 log = logging.getLogger(__name__)
 
