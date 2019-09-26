@@ -13,7 +13,7 @@ import requests
 from config import conf
 
 __all__ = ['AlphaVantageClient', 'fetch_from_web', 'APICallsExceeded',
-           'InvalidAPICall', 'UnknownSymbol']
+           'InvalidAPICall', 'UnknownSymbol', 'symbol_lookup']
 log = logging.getLogger(__name__)
 
 QUOTE_COLS = ['timestamp', 'open', 'high', 'low', 'close', 'adjusted_close',
@@ -146,7 +146,7 @@ class AlphaVantageClient(metaclass=Singleton):
         if start_time is not None and start_time >= datetime.today():
             log.debug('No update needed; the requested start '
                       'date is in the future.')
-            pd.DataFrame(columns=QUOTE_COLS)
+            return pd.DataFrame(columns=QUOTE_COLS)
         if start_time is None:
             start_time = MIN_TIME
 
@@ -197,8 +197,47 @@ class AlphaVantageClient(metaclass=Singleton):
 
 
 def fetch_from_web(symbol: str, start_time: datetime) -> pd.DataFrame:
+    """Return a table of historical security valuations
+
+    Parameters
+    ----------
+    symbol : str
+        The stock ticker symbol
+    start_time : datetime, optional
+        If supplied, start the output table at this date.
+        Supplying a recent date will allow us to request fewer
+        rows returned from the Alpha Vantage service.
+        The default will return all available historical quotes.
+
+    Returns
+    -------
+    pd.DataFrame
+        A table of historical quotes, indexed by the datetime of the quote
+    """
     log.info(f'Reading {symbol} data from Alpha Vantage.')
     client = AlphaVantageClient(conf('av_api_key'))
     new_quotes = client.historical_quotes(symbol, start_time=start_time)
 
     return new_quotes
+
+
+def symbol_lookup(symbol: str) -> Dict[str, str]:
+    """Look up information about a symbol from AlphaVantage.
+
+    See https://www.alphavantage.co/documentation/#symbolsearch
+
+    Parameters
+    ----------
+    symbol:
+        The symbol to retrieve information on.
+
+    Returns
+    -------
+    dict
+        A dictionary which includes keys "symbol", "name", "type",
+        "region", and "currency".
+    """
+    log.info(f'Reading {symbol} data from Alpha Vantage.')
+    client = AlphaVantageClient(conf('av_api_key'))
+
+    return client.symbol_lookup(symbol)

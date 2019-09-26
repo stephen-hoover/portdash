@@ -7,10 +7,13 @@ from typing import Iterable, Sequence, Union
 
 import pandas as pd
 
-from portdash.models import Distribution, Quote
-from portdash.apis import fetch_from_web, InvalidAPICall
+from portdash.extensions import db
+from portdash.models import Distribution, Quote, Security
+from portdash.apis import fetch_from_web, InvalidAPICall, symbol_lookup
 
 log = logging.getLogger(__name__)
+
+DEFAULT_SOURCE = 'alphavantage'
 
 
 def get_price(symbol: str,
@@ -45,6 +48,9 @@ def refresh_quotes(all_symbols: Iterable[str]=None,
                    skip_downloads: Iterable[str]=None):
     """Update all quotes and distributions
 
+    If given a symbol which is not already in the database, download
+    metadata on it, if possible, and add it to the database.
+
     Parameters
     ----------
     all_symbols:
@@ -68,16 +74,20 @@ def refresh_quotes(all_symbols: Iterable[str]=None,
     for symbol in symbols_to_download:
         # Determine if we need to update, based on the most recent data.
         # We won't get quotes more often than daily.
-        last_quote = getattr(Quote.most_recent(symbol), 'date', None)
-        if last_quote:
-            last_quote = datetime.combine(last_quote, time.max)
-            quotes_are_stale = (datetime.today() - last_quote >
+        sec = Security.query.get(symbol)
+        if not sec:
+            sec = _new_security(symbol)
+        if sec.last_updated:
+            quotes_are_stale = (datetime.today() - sec.last_updated >
                                 timedelta(days=1))
         else:
             quotes_are_stale = True
 
         # Retrieve new quotes and insert into the database.
         if quotes_are_stale:
+            last_quote = getattr(Quote.most_recent(symbol), 'date', None)
+            if last_quote:
+                last_quote = datetime.combine(last_quote, time.max)
             _start = (None if last_quote is None else
                       last_quote + timedelta(days=1))
             log.debug(f"Fetching new quotes for {symbol}. "
@@ -88,5 +98,36 @@ def refresh_quotes(all_symbols: Iterable[str]=None,
                                                'dividend_amount': 'amount'}))
                 Quote.insert(new_quotes, symbol=symbol)
                 Distribution.insert(new_quotes, symbol=symbol)
+                _reset_last_updated(sec)
             except InvalidAPICall:
                 log.exception(f'Unable to fetch quotes for {symbol}')
+        else:
+            log.debug(f'{symbol} quotes are up to date.')
+
+
+def _reset_last_updated(sec: Security):
+    """Mark a given Security as last updated now."""
+    try:
+        sec.last_updated = datetime.today()
+        db.session.commit()
+        log.debug(f'Set last_updated to {sec.last_updated} for {sec.symbol}')
+    except Exception:
+        log.exception(f"Unable to update last_updated field for {sec.symbol}.")
+        db.session.rollback()
+
+
+def _new_security(symbol: str) -> Security:
+    """Insert a new Security in the database, using type and name data
+    retrieved from the web API.
+    """
+    sec_data = symbol_lookup(symbol)
+    sec = Security(symbol=symbol, type=sec_data['type'], name=sec_data['name'],
+                   source=DEFAULT_SOURCE)
+    try:
+        db.session.add(sec)
+        db.session.commit()
+        log.debug(f'Added {sec.symbol} to the database.')
+    except Exception:
+        log.exception(f"Unable to add new security {symbol} to the database.")
+        db.session.rollback()
+    return sec
