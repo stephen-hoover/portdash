@@ -13,7 +13,7 @@ from portdash.apis import fetch_from_web, InvalidAPICall, symbol_lookup
 
 log = logging.getLogger(__name__)
 
-DEFAULT_SOURCE = 'alphavantage'
+DEFAULT_QUOTE_SOURCE = 'alphavantage'
 
 
 def get_price(symbol: str,
@@ -122,7 +122,7 @@ def _new_security(symbol: str) -> Security:
     """
     sec_data = symbol_lookup(symbol)
     sec = Security(symbol=symbol, type=sec_data['type'], name=sec_data['name'],
-                   source=DEFAULT_SOURCE)
+                   quote_source=DEFAULT_QUOTE_SOURCE)
     try:
         db.session.add(sec)
         db.session.commit()

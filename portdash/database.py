@@ -43,7 +43,7 @@ def _get_accounts(refresh: bool=False,
     return accts
 
 
-def get_account_names(simulated: bool=True) -> Tuple[str]:
+def get_account_names(simulated: bool=True) -> Tuple[str, ...]:
     """Return names of all accounts in the database
 
     If `simulated` is False, return only names of real accounts.
