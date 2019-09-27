@@ -29,3 +29,16 @@ account_transactions:
 ## Use this to ignore some accounts which might
 ## be in the `investment_transactions` file
 #skip_accounts: []
+
+
+###########
+## Seeding:
+
+## Add extra detail on securities here. Names will be automatically
+## downloaded from Alpha Vantage, but can be overridden.
+
+securities:
+  - symbol: VFINX
+    quote_source: alphavantage
+    type: Mutual Fund
+    location: domestic
