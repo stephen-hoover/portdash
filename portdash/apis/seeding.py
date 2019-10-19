@@ -3,8 +3,8 @@
 import logging
 from typing import Dict, List
 
-from portdash.apis import symbol_lookup, UnknownSymbol
-from portdash.apis.quotes import DEFAULT_QUOTE_SOURCE
+from portdash.io import symbol_lookup, UnknownSymbol
+from portdash.io.quotes import DEFAULT_QUOTE_SOURCE
 from portdash.extensions import db
 from portdash.models import Security
 
@@ -86,3 +86,4 @@ if __name__ == '__main__':
         securities_seeds = config.get_config().get('securities')
         if securities_seeds:
             seed_securities(securities_seeds)
+            log.info("Finished seeding securities.")

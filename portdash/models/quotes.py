@@ -33,9 +33,13 @@ class Quote(db.Model):
         ----------
         df : pd.DataFrame
             Table indexed by date, with columns "price" and "volume".
+            Allow "close" as a synonym for "price".
         symbol : str
             The ticker symbol for the security to update.
         """
+        if 'price' not in df and 'close' in df:
+            # Use "close" as a synonym for "price".
+            df = df.rename(columns={'close': 'price'})
         if 'price' not in df or 'volume' not in df:
             raise TypeError(f'The input table must have "price" and '
                             f'"volume" columns.')
