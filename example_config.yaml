@@ -23,9 +23,6 @@ account_transactions:
 ## Create a simulated portfolio for each of these ticker symbols
 #symbols_to_simulate: []
 
-## Don't attempt to download these tickers
-#skip_symbol_downloads: []
-
 ## Use this to ignore some accounts which might
 ## be in the `investment_transactions` file
 #skip_accounts: []
