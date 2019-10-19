@@ -43,8 +43,7 @@ def get_max_date() -> datetime:
     return datetime.combine(Quote.most_recent().date, time.min)
 
 
-def refresh_quotes(all_symbols: Iterable[str]=None,
-                   skip_downloads: Iterable[str]=None):
+def refresh_quotes(symbols_to_download: Iterable[str]=None):
     """Update all quotes and distributions
 
     If given a symbol which is not already in the database, download
@@ -52,23 +51,16 @@ def refresh_quotes(all_symbols: Iterable[str]=None,
 
     Parameters
     ----------
-    all_symbols:
+    symbols_to_download:
         Update quotes and dividends for these securities if they're already
         in the database, or download all available historical data if the
         securities aren't in the database. Default to updating everything
         currently in the database.
-    skip_downloads:
-        If provided, don't try to update these securities. Most useful
-        when updating all securities in the database.
     """
-    skip_downloads = skip_downloads or []
-    if all_symbols is None:
+    if symbols_to_download is None:
         log.info('Reading all quotes in database.')
         query = Quote.query.with_entities(Quote.symbol).distinct()
-        all_symbols = [row.symbol for row in query.all()]
-    if skip_downloads:
-        log.info(f"Don't try to download quotes for {skip_downloads}")
-    symbols_to_download = set(all_symbols) - set(skip_downloads)
+        symbols_to_download = [row.symbol for row in query.all()]
 
     for symbol in symbols_to_download:
         # Determine if we need to update, based on the most recent data.

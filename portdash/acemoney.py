@@ -143,8 +143,7 @@ def refresh_portfolio(refresh_cache: bool=False):
         conf('account_transactions'))
     # Read all the quotes either from disk or from the web.
     if refresh_cache:
-        quotes.refresh_quotes(inv.Symbol.unique(),
-                              conf('skip_symbol_downloads'))
+        quotes.refresh_quotes(inv.Symbol.unique())
     max_date = quotes.get_max_date()
     log.info(f"The most recent quote is from {max_date}")
 
