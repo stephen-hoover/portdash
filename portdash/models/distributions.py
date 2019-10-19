@@ -32,12 +32,15 @@ class Distribution(db.Model):
         Parameters
         ----------
         df : pd.DataFrame
-            Table indexed by date, with column "amount".
+            Table indexed by date, with column "amount" or "dividend_amount".
         symbol : str
             The ticker symbol for the security to update.
         """
+        if 'amount' not in df and 'dividend_amount' in df:
+            df = df.rename(columns={'dividend_amount': 'amount'})
         if 'amount' not in df:
-            raise TypeError(f'The input table must have an "amount" column.')
+            raise TypeError(f'The input table must have an "amount" or '
+                            f'"dividend_amount" column.')
         sql = (db.session.query(cls)
                .filter(cls.symbol == symbol)
                .with_entities(cls.date, cls.amount)

@@ -8,9 +8,9 @@ Setup:
 source .envrc
 pip install -r requirements.txt
 
-PORTDASH_CONF=sample_config.yaml flask db init
-PORTDASH_CONF=sample_config.yaml flask db migrate -m 'init'
-PORTDASH_CONF=sample_config.yaml flask db upgrade
+PORTDASH_CONF=config_filename.yaml flask db init
+PORTDASH_CONF=config_filename.yaml flask db migrate -m 'init'
+PORTDASH_CONF=config_filename.yaml flask db upgrade
 ```
 
 See `migrations/alembic.ini` for logger settings.

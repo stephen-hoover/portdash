@@ -17,4 +17,3 @@ data/
 
 # Local database
 app.db
-migrations

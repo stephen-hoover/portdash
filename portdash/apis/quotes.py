@@ -9,11 +9,10 @@ import pandas as pd
 
 from portdash.extensions import db
 from portdash.models import Distribution, Quote, Security
-from portdash.apis import fetch_from_web, InvalidAPICall, symbol_lookup
+from portdash.io import symbol_lookup, UnknownSymbol
+from portdash.io.quotes import fetch
 
 log = logging.getLogger(__name__)
-
-DEFAULT_QUOTE_SOURCE = 'alphavantage'
 
 
 def get_price(symbol: str,
@@ -92,15 +91,11 @@ def refresh_quotes(all_symbols: Iterable[str]=None,
                       last_quote + timedelta(days=1))
             log.debug(f"Fetching new quotes for {symbol}. "
                       f"Last quote: {last_quote}.")
-            try:
-                new_quotes = (fetch_from_web(symbol, start_time=_start)
-                              .rename(columns={'close': 'price',
-                                               'dividend_amount': 'amount'}))
-                Quote.insert(new_quotes, symbol=symbol)
-                Distribution.insert(new_quotes, symbol=symbol)
-                _reset_last_updated(sec)
-            except InvalidAPICall:
-                log.exception(f'Unable to fetch quotes for {symbol}')
+
+            new_quotes = fetch(sec.quote_source, symbol, start_time=_start)
+            Quote.insert(new_quotes, symbol=symbol)
+            Distribution.insert(new_quotes, symbol=symbol)
+            _reset_last_updated(sec)
         else:
             log.debug(f'{symbol} quotes are up to date.')
 
@@ -120,9 +115,12 @@ def _new_security(symbol: str) -> Security:
     """Insert a new Security in the database, using type and name data
     retrieved from the web API.
     """
-    sec_data = symbol_lookup(symbol)
-    sec = Security(symbol=symbol, type=sec_data['type'], name=sec_data['name'],
-                   quote_source=DEFAULT_QUOTE_SOURCE)
+    try:
+        sec_data = symbol_lookup(symbol)
+    except UnknownSymbol:
+        log.warning(f"Unable to find {symbol} data.")
+        sec_data = {'type': None, 'name': symbol}
+    sec = Security(symbol=symbol, type=sec_data['type'], name=sec_data['name'])
     try:
         db.session.add(sec)
         db.session.commit()

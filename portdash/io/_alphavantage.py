@@ -196,7 +196,7 @@ class AlphaVantageClient(metaclass=Singleton):
         return {' '.join(k.split()[1:]): v for k, v in data[0].items()}
 
 
-def fetch_from_web(symbol: str, start_time: datetime) -> pd.DataFrame:
+def fetch_from_web(symbol: str, start_time: datetime=None) -> pd.DataFrame:
     """Return a table of historical security valuations
 
     Parameters
@@ -217,6 +217,7 @@ def fetch_from_web(symbol: str, start_time: datetime) -> pd.DataFrame:
     log.info(f'Reading {symbol} data from Alpha Vantage.')
     client = AlphaVantageClient(conf('av_api_key'))
     new_quotes = client.historical_quotes(symbol, start_time=start_time)
+    new_quotes.index.name = 'date'
 
     return new_quotes
 

@@ -19,7 +19,7 @@ class Security(db.Model):
     location = db.Column(db.Enum(LocationEnum), nullable=True)
 
     # Where can we find quotes for this security?
-    quote_source = db.Column(db.String(100), nullable=False)
+    quote_source = db.Column(db.String(100), nullable=True)
 
     # The last time we updated the security's quotes in the database.
     last_updated = db.Column(db.DateTime, nullable=True)
