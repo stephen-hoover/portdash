@@ -27,7 +27,8 @@ def _split_source_str(source: str) -> Tuple[str, Union[str, None]]:
         raise ValueError(f"Unrecognized source string: {source}")
 
 
-def fetch(source: str, symbol: str, start_time: datetime=None) -> pd.DataFrame:
+def fetch(source: str, symbol: str, start_time: datetime=None) -> \
+      Union[pd.DataFrame, None]:
     """Return a table of historical security valuations
 
     Use the `source` string to dispatch the lookup to the appropriate source.
@@ -49,15 +50,17 @@ def fetch(source: str, symbol: str, start_time: datetime=None) -> pd.DataFrame:
         A table of historical quotes, indexed by the datetime of the quote.
         The index name will be "date", and the table will have at least
         columns named "price", "dividend_amount", and "volume".
+    The return value will be `None` if there's an error while attempting
+    to read quotes from the web.
     """
     source_name, source_arg = _split_source_str(source)
     if source_name == 'alphavantage':
         try:
-            return (fetch_from_web(symbol, start_time=start_time)
+            return (fetch_from_web(symbol=symbol, start_time=start_time)
                     .rename(columns={'close': 'price'}))
         except InvalidAPICall:
             log.exception(f'Unable to fetch quotes for {symbol}')
-        return fetch_from_web(symbol=symbol, start_time=start_time)
+            return
     elif source_name == 'const':
         log.debug(f"Filling {symbol} with constant "
                   f"quotes values of {source_arg}.")

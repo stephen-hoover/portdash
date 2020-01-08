@@ -85,9 +85,12 @@ def refresh_quotes(symbols_to_download: Iterable[str]=None):
                       f"Last quote: {last_quote}.")
 
             new_quotes = fetch(sec.quote_source, symbol, start_time=_start)
-            Quote.insert(new_quotes, symbol=symbol)
-            Distribution.insert(new_quotes, symbol=symbol)
-            _reset_last_updated(sec)
+            if new_quotes is not None:
+                # If we error attempting to fetch quotes,
+                # we'll get a `None`.
+                Quote.insert(new_quotes, symbol=symbol)
+                Distribution.insert(new_quotes, symbol=symbol)
+                _reset_last_updated(sec)
         else:
             log.debug(f'{symbol} quotes are up to date.')
 
