@@ -7,28 +7,26 @@ from portdash import database as db
 
 layout = html.Div(children=[
     html.Div([
-        html.Div([
-            html.H4('Account(s) to display',
-                    style={'margin-bottom': 0, 'margin-top': 0}),
-            dcc.Dropdown(id='portfolio-selector',
-                         options=[{'label': n, 'value': n}
-                                  for n in db.get_account_names()] +
-                                 [{'label': 'All Accounts',
-                                   'value': 'All Accounts'}],
-                         multi=True,
-                         placeholder='Select an account',
-                         value=['All Accounts']),
-            ], style={'text-align': 'left'}),
-        html.Div([
-            html.H4('Value to chart',
-                    style={'margin-bottom': 0, 'margin-top': 0}),
-            dcc.Dropdown(id='line-selector',
-                         options=[{'label': v, 'value': k}
-                                  for k, v in conf('lines').items()],
-                         multi=True,
-                         value=['_total:1']),
-            ], style={'text-align': 'right'}),
-    ], style={'columnCount': 2}),
+        html.H4('Account(s) to display',
+                style={'margin-bottom': 0, 'margin-top': 0}),
+        dcc.Dropdown(id='portfolio-selector',
+                     options=[{'label': n, 'value': n}
+                              for n in db.get_account_names()] +
+                             [{'label': 'All Accounts',
+                               'value': 'All Accounts'}],
+                     multi=True,
+                     placeholder='Select an account',
+                     value=['All Accounts']),
+        ], style={'text-align': 'left'}),
+    html.Div([
+        html.H4('Value to chart',
+                style={'margin-bottom': 0, 'margin-top': 0}),
+        dcc.Dropdown(id='line-selector',
+                     options=[{'label': v, 'value': k}
+                              for k, v in conf('lines').items()],
+                     multi=True,
+                     value=['_total:1']),
+        ], style={'text-align': 'left'}),
     html.Div([
         dcc.RadioItems(
             id='comparison-selector',
