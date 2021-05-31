@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from typing import Sequence, Union
 
@@ -72,7 +73,7 @@ class Distribution(db.Model):
         return qu
 
     @classmethod
-    def get_amount_at_date(cls, symbol: str, date: pd.datetime) -> float:
+    def get_amount_at_date(cls, symbol: str, date: datetime) -> float:
         row = (cls.query
                .filter(db.and_(cls.symbol == symbol, cls.date == date))
                .first())
@@ -86,7 +87,7 @@ class Distribution(db.Model):
     def get_amount(cls,
                    symbol: str,
                    index: Union[pd.DatetimeIndex,
-                               Sequence[pd.datetime]]=None) -> pd.Series:
+                               Sequence[datetime]]=None) -> pd.Series:
         df = pd.read_sql(sql=(db.session
                               .query(cls)
                               .filter(cls.symbol == symbol)

@@ -43,7 +43,7 @@ CONF_STATE = {
 
 def load_config(filename: str) -> None:
     with open(filename, 'rt') as _fin:
-        conf_dict = yaml.load(_fin)
+        conf_dict = yaml.safe_load(_fin)
     update_config(conf_dict)
 
 
