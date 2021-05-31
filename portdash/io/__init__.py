@@ -1,2 +1,1 @@
-from portdash.io._alphavantage import (InvalidAPICall, symbol_lookup,
-                                       UnknownSymbol)
+from portdash.io._alphavantage import InvalidAPICall, symbol_lookup, UnknownSymbol

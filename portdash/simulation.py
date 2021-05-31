@@ -21,18 +21,19 @@ def add_sim_dividend(portfolio: pd.DataFrame, sim_symbol: str) -> pd.DataFrame:
             # Create a Series with 0s before the date, and the value of
             # the distribution at and after the date.
             value = portfolio.loc[[date], sim_symbol] * amount
-            value = value.reindex(portfolio.index, method='ffill').fillna(0)
+            value = value.reindex(portfolio.index, method="ffill").fillna(0)
 
             qty = value / price
             portfolio[f"{sim_symbol}_dist"] += value
             portfolio[sim_symbol] += qty
-            portfolio['_total_dist'] += value
+            portfolio["_total_dist"] += value
 
     return portfolio
 
 
-def create_simulated_portfolio(portfolio: pd.DataFrame,
-                               sim_symbol: str = 'SWPPX') -> pd.DataFrame:
+def create_simulated_portfolio(
+    portfolio: pd.DataFrame, sim_symbol: str = "SWPPX"
+) -> pd.DataFrame:
     """Given a portfolio, create a parallel portfolio which has
     all of the same contributions and withdrawals. In the parallel
     simulated portfolio, all contributions are immediately used to
@@ -42,7 +43,7 @@ def create_simulated_portfolio(portfolio: pd.DataFrame,
     sim_port = port.init_portfolio(portfolio.index)
     sim_port = port.init_symbol(sim_port, sim_symbol)
     prices = quotes.get_price(sim_symbol, sim_port.index)
-    for column in ['contributions', 'withdrawals']:
+    for column in ["contributions", "withdrawals"]:
         sim_port[column] = portfolio[column].copy()
 
     deposits = port.get_deposits(portfolio)

@@ -15,23 +15,23 @@ from portdash.io.quotes import fetch
 log = logging.getLogger(__name__)
 
 
-def get_price(symbol: str,
-              index: Union[pd.DatetimeIndex,
-                           Sequence[datetime]]) -> pd.Series:
+def get_price(
+    symbol: str, index: Union[pd.DatetimeIndex, Sequence[datetime]]
+) -> pd.Series:
     """Fetch prices for a given symbol in the provided date range"""
     this_quote = Quote.get_price(symbol, index)
 
     if this_quote is None:
-        log.error(f"Couldn't find a price for {symbol}. "
-                  f"Assuming its value is zero.")
-        price = pd.Series(0., index=index)
+        log.error(
+            f"Couldn't find a price for {symbol}. " f"Assuming its value is zero."
+        )
+        price = pd.Series(0.0, index=index)
     else:
         price = this_quote
     return price
 
 
-def get_dividend(symbol: str,
-                 index: pd.DatetimeIndex=None) -> pd.Series:
+def get_dividend(symbol: str, index: pd.DatetimeIndex = None) -> pd.Series:
     """Fetch dividends from a given symbol in the provided date range"""
     qu = Distribution.get_amount(symbol, index)
     qu.index.name = ""
@@ -43,7 +43,7 @@ def get_max_date() -> datetime:
     return datetime.combine(Quote.most_recent().date, time.min)
 
 
-def refresh_quotes(symbols_to_download: Iterable[str]=None):
+def refresh_quotes(symbols_to_download: Iterable[str] = None):
     """Update all quotes and distributions
 
     If given a symbol which is not already in the database, download
@@ -58,7 +58,7 @@ def refresh_quotes(symbols_to_download: Iterable[str]=None):
         currently in the database.
     """
     if symbols_to_download is None:
-        log.info('Reading all quotes in database.')
+        log.info("Reading all quotes in database.")
         query = Quote.query.with_entities(Quote.symbol).distinct()
         symbols_to_download = [row.symbol for row in query.all()]
 
@@ -69,20 +69,19 @@ def refresh_quotes(symbols_to_download: Iterable[str]=None):
         if not sec:
             sec = _new_security(symbol)
         if sec.last_updated:
-            quotes_are_stale = (datetime.today() - sec.last_updated >
-                                timedelta(days=1))
+            quotes_are_stale = datetime.today() - sec.last_updated > timedelta(days=1)
         else:
             quotes_are_stale = True
 
         # Retrieve new quotes and insert into the database.
         if quotes_are_stale:
-            last_quote = getattr(Quote.most_recent(symbol), 'date', None)
+            last_quote = getattr(Quote.most_recent(symbol), "date", None)
             if last_quote:
                 last_quote = datetime.combine(last_quote, time.max)
-            _start = (None if last_quote is None else
-                      last_quote + timedelta(days=1))
-            log.debug(f"Fetching new quotes for {symbol}. "
-                      f"Last quote: {last_quote}.")
+            _start = None if last_quote is None else last_quote + timedelta(days=1)
+            log.debug(
+                f"Fetching new quotes for {symbol}. " f"Last quote: {last_quote}."
+            )
 
             new_quotes = fetch(sec.quote_source, symbol, start_time=_start)
             if new_quotes is not None:
@@ -92,7 +91,7 @@ def refresh_quotes(symbols_to_download: Iterable[str]=None):
                 Distribution.insert(new_quotes, symbol=symbol)
                 _reset_last_updated(sec)
         else:
-            log.debug(f'{symbol} quotes are up to date.')
+            log.debug(f"{symbol} quotes are up to date.")
 
 
 def _reset_last_updated(sec: Security):
@@ -100,7 +99,7 @@ def _reset_last_updated(sec: Security):
     try:
         sec.last_updated = datetime.today()
         db.session.commit()
-        log.debug(f'Set last_updated to {sec.last_updated} for {sec.symbol}')
+        log.debug(f"Set last_updated to {sec.last_updated} for {sec.symbol}")
     except Exception:
         log.exception(f"Unable to update last_updated field for {sec.symbol}.")
         db.session.rollback()
@@ -114,12 +113,12 @@ def _new_security(symbol: str) -> Security:
         sec_data = symbol_lookup(symbol)
     except UnknownSymbol:
         log.warning(f"Unable to find {symbol} data.")
-        sec_data = {'type': None, 'name': symbol}
-    sec = Security(symbol=symbol, type=sec_data['type'], name=sec_data['name'])
+        sec_data = {"type": None, "name": symbol}
+    sec = Security(symbol=symbol, type=sec_data["type"], name=sec_data["name"])
     try:
         db.session.add(sec)
         db.session.commit()
-        log.debug(f'Added {sec.symbol} to the database.')
+        log.debug(f"Added {sec.symbol} to the database.")
     except Exception:
         log.exception(f"Unable to add new security {symbol} to the database.")
         db.session.rollback()

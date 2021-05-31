@@ -33,17 +33,18 @@ from portdash import acemoney as processing
 
 
 @lru_cache(5)
-def _get_accounts(refresh: bool=False,
-                  download_quotes: bool=False) -> Dict[str, pd.DataFrame]:
+def _get_accounts(
+    refresh: bool = False, download_quotes: bool = False
+) -> Dict[str, pd.DataFrame]:
     """Return dictionary of all accounts, keyed by account name"""
-    if refresh or not os.path.exists(conf('etl_accts')):
+    if refresh or not os.path.exists(conf("etl_accts")):
         accts = processing.refresh_portfolio(refresh_cache=download_quotes)[0]
     else:
-        accts = pickle.load(open(conf('etl_accts'), 'rb'))[0]
+        accts = pickle.load(open(conf("etl_accts"), "rb"))[0]
     return accts
 
 
-def get_account_names(simulated: bool=True) -> Tuple[str, ...]:
+def get_account_names(simulated: bool = True) -> Tuple[str, ...]:
     """Return names of all accounts in the database
 
     If `simulated` is False, return only names of real accounts.
@@ -51,8 +52,9 @@ def get_account_names(simulated: bool=True) -> Tuple[str, ...]:
     if simulated:
         account_names = _get_accounts().keys()
     else:
-        account_names = [k for k in _get_accounts().keys()
-                         if not k.startswith('Simulated')]
+        account_names = [
+            k for k in _get_accounts().keys() if not k.startswith("Simulated")
+        ]
     return tuple(sorted(account_names))
 
 
@@ -80,7 +82,7 @@ def sum_accounts(account_names: Tuple[str]) -> pd.DataFrame:
     pd.DataFrame :
         A new "account" which is the sum of the named accounts in the input
     """
-    if 'All Accounts' in account_names:
+    if "All Accounts" in account_names:
         account_names = get_account_names(simulated=False)
     return sum(get_account(name) for name in account_names)
 
@@ -92,4 +94,4 @@ def get_last_quote_date() -> date:
 
 def get_max_trans_date() -> date:
     """Return the date of the last transaction in the database"""
-    return pickle.load(open(conf('etl_accts'), 'rb'))[1]
+    return pickle.load(open(conf("etl_accts"), "rb"))[1]

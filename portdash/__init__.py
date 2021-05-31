@@ -20,19 +20,21 @@ def register_dashapps(app):
     from portdash.dashapp.callbacks import register_callbacks
 
     # Meta tags for viewport responsiveness
-    meta_viewport = {"name": "viewport",
-                     "content": ("width=device-width, "
-                                 "initial-scale=1, "
-                                 "shrink-to-fit=no")}
+    meta_viewport = {
+        "name": "viewport",
+        "content": ("width=device-width, " "initial-scale=1, " "shrink-to-fit=no"),
+    }
 
-    dashapp = dash.Dash(__name__,
-                        server=app,
-                        url_base_pathname='/',
-                        assets_folder=get_root_path(__name__) + '/dashapp/assets/',
-                        meta_tags=[meta_viewport])
+    dashapp = dash.Dash(
+        __name__,
+        server=app,
+        url_base_pathname="/",
+        assets_folder=get_root_path(__name__) + "/dashapp/assets/",
+        meta_tags=[meta_viewport],
+    )
 
     with app.app_context():
-        dashapp.title = 'Portfolio Dashboard'
+        dashapp.title = "Portfolio Dashboard"
         dashapp.layout = layout
         register_callbacks(dashapp)
 

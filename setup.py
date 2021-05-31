@@ -9,14 +9,14 @@ def main():
         author_email="Stephen.LD.Hoover@gmail.com",
         packages=find_packages(),
         install_requires=[
-            'pyyaml',
-            'pandas',
-            'numpy',
-            'dash',
-            'requests',
-            'flask',
-            'flask-sqlalchemy',
-            'flask-migrate',
+            "pyyaml",
+            "pandas",
+            "numpy",
+            "dash",
+            "requests",
+            "flask",
+            "flask-sqlalchemy",
+            "flask-migrate",
         ],
     )
 

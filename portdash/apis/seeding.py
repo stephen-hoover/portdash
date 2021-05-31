@@ -26,23 +26,27 @@ def seed_securities(sec_list: List[Dict[str, str]]):
     columns = set(Security.__table__.columns.keys())
     try:
         for sec_desc in sec_list:
-            if 'symbol' not in sec_desc:
-                log.error(f'No "symbol" in the securities table seed '
-                          f'{sec_desc}. Skipping.')
+            if "symbol" not in sec_desc:
+                log.error(
+                    f'No "symbol" in the securities table seed '
+                    f"{sec_desc}. Skipping."
+                )
             unknown_keys = set(sec_desc) - columns
             if unknown_keys:
-                log.warning(f'Found seed attributes {unknown_keys} which do '
-                            f'not correspond to any of the columns in the '
-                            f'securities table: {columns}. Ignoring extra '
-                            f'attributes.')
-            sec = Security.query.get(sec_desc['symbol'])
+                log.warning(
+                    f"Found seed attributes {unknown_keys} which do "
+                    f"not correspond to any of the columns in the "
+                    f"securities table: {columns}. Ignoring extra "
+                    f"attributes."
+                )
+            sec = Security.query.get(sec_desc["symbol"])
             if not sec:
-                sec = _new_security(sec_desc['symbol'])
-            for col_name in (set(sec_desc) & columns):
+                sec = _new_security(sec_desc["symbol"])
+            for col_name in set(sec_desc) & columns:
                 setattr(sec, col_name, sec_desc[col_name])
         db.session.commit()
     except Exception:
-        log.exception(f'Unable to seed securities. Rolling back transactions.')
+        log.exception(f"Unable to seed securities. Rolling back transactions.")
         db.session.rollback()
 
 
@@ -53,37 +57,50 @@ def _new_security(symbol: str) -> Security:
     try:
         sec_data = symbol_lookup(symbol)
     except UnknownSymbol as exc:
-        log.warning(f'Could not find a match online for {symbol}. '
-                    f'Best matches : {exc.matches}.')
-        sec_data = {'name': symbol}
-    sec = Security(symbol=symbol, type=sec_data.get('type'),
-                   name=sec_data['name'], quote_source=DEFAULT_QUOTE_SOURCE)
+        log.warning(
+            f"Could not find a match online for {symbol}. "
+            f"Best matches : {exc.matches}."
+        )
+        sec_data = {"name": symbol}
+    sec = Security(
+        symbol=symbol,
+        type=sec_data.get("type"),
+        name=sec_data["name"],
+        quote_source=DEFAULT_QUOTE_SOURCE,
+    )
     db.session.add(sec)
     return sec
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # When run as a script, seed everything.
     import argparse
     import config
     from portdash import create_app
 
     parser = argparse.ArgumentParser(
-        description="Load data into the database from a config file")
-    parser.add_argument('-c', '--conf', required=True,
-                        help="Configuration file in YAML format")
-    parser.add_argument('-v', '--verbose', action='store_true', default=False,
-                        help="Output verbose logs.")
+        description="Load data into the database from a config file"
+    )
+    parser.add_argument(
+        "-c", "--conf", required=True, help="Configuration file in YAML format"
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Output verbose logs.",
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(level=('DEBUG' if args.verbose else 'INFO'))
+    logging.basicConfig(level=("DEBUG" if args.verbose else "INFO"))
     config.load_config(args.conf)
 
     server = create_app()
 
     with server.app_context():
         db.create_all()
-        securities_seeds = config.get_config().get('securities')
+        securities_seeds = config.get_config().get("securities")
         if securities_seeds:
             seed_securities(securities_seeds)
             log.info("Finished seeding securities.")

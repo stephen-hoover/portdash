@@ -9,8 +9,8 @@ import pandas as pd
 
 from portdash.io._alphavantage import fetch_from_web, InvalidAPICall
 
-DEFAULT_QUOTE_SOURCE = 'alphavantage'
-VALID_QUOTE_SOURCES = ['alphavantage', 'csv', 'const']
+DEFAULT_QUOTE_SOURCE = "alphavantage"
+VALID_QUOTE_SOURCES = ["alphavantage", "csv", "const"]
 
 log = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 def _split_source_str(source: str) -> Tuple[str, Union[str, None]]:
     if not source:
         return DEFAULT_QUOTE_SOURCE, None
-    tokens = source.split(':')
+    tokens = source.split(":")
     if len(tokens) == 1:
         return tokens[0], None
     elif len(tokens) == 2:
@@ -27,8 +27,9 @@ def _split_source_str(source: str) -> Tuple[str, Union[str, None]]:
         raise ValueError(f"Unrecognized source string: {source}")
 
 
-def fetch(source: str, symbol: str, start_time: datetime=None) -> \
-      Union[pd.DataFrame, None]:
+def fetch(
+    source: str, symbol: str, start_time: datetime = None
+) -> Union[pd.DataFrame, None]:
     """Return a table of historical security valuations
 
     Use the `source` string to dispatch the lookup to the appropriate source.
@@ -54,23 +55,25 @@ def fetch(source: str, symbol: str, start_time: datetime=None) -> \
     to read quotes from the web.
     """
     source_name, source_arg = _split_source_str(source)
-    if source_name == 'alphavantage':
+    if source_name == "alphavantage":
         try:
-            return (fetch_from_web(symbol=symbol, start_time=start_time)
-                    .rename(columns={'close': 'price'}))
+            return fetch_from_web(symbol=symbol, start_time=start_time).rename(
+                columns={"close": "price"}
+            )
         except InvalidAPICall:
-            log.exception(f'Unable to fetch quotes for {symbol}')
+            log.exception(f"Unable to fetch quotes for {symbol}")
             return
-    elif source_name == 'const':
-        log.debug(f"Filling {symbol} with constant "
-                  f"quotes values of {source_arg}.")
+    elif source_name == "const":
+        log.debug(f"Filling {symbol} with constant " f"quotes values of {source_arg}.")
         return _fetch_from_const(float(source_arg), start_time=start_time)
-    elif source_name == 'csv':
+    elif source_name == "csv":
         log.debug(f"Reading {symbol} values from {source_arg}.")
         return _fetch_from_csv(filename=source_arg, start_time=start_time)
     else:
-        raise ValueError(f"Unknown source: {source}. Source name must be "
-                         f"one of {VALID_QUOTE_SOURCES}.")
+        raise ValueError(
+            f"Unknown source: {source}. Source name must be "
+            f"one of {VALID_QUOTE_SOURCES}."
+        )
 
 
 def _fetch_from_const(value: float, start_time: datetime) -> pd.DataFrame:
@@ -90,10 +93,12 @@ def _fetch_from_const(value: float, start_time: datetime) -> pd.DataFrame:
     pd.DataFrame
         A table of historical quotes, indexed by the datetime of the quote
     """
-    index = pd.date_range(start_time or '2015-01-01', datetime.today(),
-                          freq='D').rename('date')
-    return pd.DataFrame({'price': value, 'volume': 0.,
-                         'dividend_amount': 0.}, index=index)
+    index = pd.date_range(
+        start_time or "2015-01-01", datetime.today(), freq="D"
+    ).rename("date")
+    return pd.DataFrame(
+        {"price": value, "volume": 0.0, "dividend_amount": 0.0}, index=index
+    )
 
 
 def _fetch_from_csv(filename: str, start_time: datetime) -> pd.DataFrame:
@@ -112,10 +117,14 @@ def _fetch_from_csv(filename: str, start_time: datetime) -> pd.DataFrame:
     pd.DataFrame
         A table of historical quotes, indexed by the datetime of the quote
     """
-    df = pd.read_csv(os.path.expanduser(filename), index_col=0,
-                     parse_dates=True, infer_datetime_format=True)
-    df = df.rename(columns={'close': 'price'})
-    df.index.name = 'date'
+    df = pd.read_csv(
+        os.path.expanduser(filename),
+        index_col=0,
+        parse_dates=True,
+        infer_datetime_format=True,
+    )
+    df = df.rename(columns={"close": "price"})
+    df.index.name = "date"
     if start_time:
         df = df.loc[df.index >= start_time]
     return df

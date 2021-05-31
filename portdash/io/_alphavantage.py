@@ -12,14 +12,28 @@ import requests
 
 from config import conf
 
-__all__ = ['AlphaVantageClient', 'fetch_from_web', 'APICallsExceeded',
-           'InvalidAPICall', 'UnknownSymbol', 'symbol_lookup']
+__all__ = [
+    "AlphaVantageClient",
+    "fetch_from_web",
+    "APICallsExceeded",
+    "InvalidAPICall",
+    "UnknownSymbol",
+    "symbol_lookup",
+]
 log = logging.getLogger(__name__)
 
-QUOTE_COLS = ['timestamp', 'open', 'high', 'low', 'close', 'adjusted_close',
-              'volume', 'dividend_amount', 'split_coefficient']
-CSV_READER_KWARGS = {'index_col': 0, 'parse_dates': True,
-                     'infer_datetime_format': True}
+QUOTE_COLS = [
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "adjusted_close",
+    "volume",
+    "dividend_amount",
+    "split_coefficient",
+]
+CSV_READER_KWARGS = {"index_col": 0, "parse_dates": True, "infer_datetime_format": True}
 MIN_TIME = datetime(year=1970, month=1, day=1)
 
 
@@ -36,11 +50,11 @@ class UnknownSymbol(RuntimeError):
 
         # Each key in the blobs is prefixed by a number and a space,
         # e.g. "2. type". Strip the number.
-        self.matches = [{' '.join(k.split()[1:]): v for k, v in obj.items()}
-                        for obj in matches]
+        self.matches = [
+            {" ".join(k.split()[1:]): v for k, v in obj.items()} for obj in matches
+        ]
         self.symbol = symbol
-        msg = (f"Unable to find match for {symbol}. "
-               f"Best matches: \n{self.matches}")
+        msg = f"Unable to find match for {symbol}. " f"Best matches: \n{self.matches}"
         super().__init__(msg)
 
 
@@ -73,13 +87,16 @@ class AlphaVantageClient(metaclass=Singleton):
         To use this object, supply an API key from Alpha Vantage:
         https://www.alphavantage.co/support/#api-key
     """
+
     # Get historical prices from Alpha Vantage's API
-    AV_API = ('https://www.alphavantage.co/query?'
-              'function=TIME_SERIES_DAILY_ADJUSTED'
-              '&symbol={symbol}'
-              '&outputsize={size}'
-              '&datatype=csv'
-              '&apikey={api_key}')
+    AV_API = (
+        "https://www.alphavantage.co/query?"
+        "function=TIME_SERIES_DAILY_ADJUSTED"
+        "&symbol={symbol}"
+        "&outputsize={size}"
+        "&datatype=csv"
+        "&apikey={api_key}"
+    )
 
     # Set limits for use of Alpha Vantage's free API
     max_per_day = 500  # Maximum number of API queries per day
@@ -87,7 +104,7 @@ class AlphaVantageClient(metaclass=Singleton):
 
     # Errors in API calls will return a 200, but have the following text
     # in place of the anticipated contents. (This is a partial string.)
-    error_msg = b'Error Message'
+    error_msg = b"Error Message"
 
     def __init__(self, api_key: str):
         self._api_key = api_key
@@ -96,22 +113,25 @@ class AlphaVantageClient(metaclass=Singleton):
 
     def _wait_until_available(self):
         if self._n_queries >= AlphaVantageClient.max_per_day:
-            raise APICallsExceeded(f"You've reached the maximum of "
-                                   f"{AlphaVantageClient.max_per_day} "
-                                   f"daily API calls.")
+            raise APICallsExceeded(
+                f"You've reached the maximum of "
+                f"{AlphaVantageClient.max_per_day} "
+                f"daily API calls."
+            )
 
-        while ((datetime.now() - self._last_query).total_seconds() <
-                AlphaVantageClient.min_interval):
+        while (
+            datetime.now() - self._last_query
+        ).total_seconds() < AlphaVantageClient.min_interval:
             time.sleep(0.2)
 
     @staticmethod
     def _check_and_raise(response: requests.Response, symbol: str):
         response.raise_for_status()
         if AlphaVantageClient.error_msg in response.content[:200]:
-            msg = response.json()['Error Message']
+            msg = response.json()["Error Message"]
             # Include the web API call in the error msg, but mask the API key
-            addr = re.sub(r'&apikey=[^&]+', r'&apikey=****', response.url)
-            raise InvalidAPICall(f'Error fetching {symbol} from {addr}: {msg}')
+            addr = re.sub(r"&apikey=[^&]+", r"&apikey=****", response.url)
+            raise InvalidAPICall(f"Error fetching {symbol} from {addr}: {msg}")
 
     def _query(self, web_addr, symbol):
         """Handle all API interactions through here so we can keep track of
@@ -124,8 +144,9 @@ class AlphaVantageClient(metaclass=Singleton):
         self._check_and_raise(response, symbol)
         return response
 
-    def historical_quotes(self, symbol: str,
-                          start_time: datetime=None) -> pd.DataFrame:
+    def historical_quotes(
+        self, symbol: str, start_time: datetime = None
+    ) -> pd.DataFrame:
         """Return a table of historical security valuations
 
         Parameters
@@ -144,20 +165,20 @@ class AlphaVantageClient(metaclass=Singleton):
             A table of historical quotes, indexed by the datetime of the quote
         """
         if start_time is not None and start_time >= datetime.today():
-            log.debug('No update needed; the requested start '
-                      'date is in the future.')
+            log.debug("No update needed; the requested start " "date is in the future.")
             return pd.DataFrame(columns=QUOTE_COLS)
         if start_time is None:
             start_time = MIN_TIME
 
         if (datetime.now() - start_time).total_seconds() / 86400 < 100:
-            size = 'compact'  # Return latest 100 data points
+            size = "compact"  # Return latest 100 data points
             log.debug("Making compact query")
         else:
-            size = 'full'  # Return full time series
+            size = "full"  # Return full time series
             log.debug("Making full query")
         web_addr = AlphaVantageClient.AV_API.format(
-            symbol=symbol, size=size, api_key=conf('av_api_key'))
+            symbol=symbol, size=size, api_key=conf("av_api_key")
+        )
         response = self._query(web_addr, symbol)
 
         quotes = pd.read_csv(io.BytesIO(response.content), **CSV_READER_KWARGS)
@@ -179,24 +200,25 @@ class AlphaVantageClient(metaclass=Singleton):
             A dictionary which includes keys "symbol", "name", "type",
             "region", and "currency".
         """
-        lookup_api = (f'https://www.alphavantage.co/query?'
-                      f'function=SYMBOL_SEARCH'
-                      f'&keywords={symbol}&apikey={self._api_key}')
+        lookup_api = (
+            f"https://www.alphavantage.co/query?"
+            f"function=SYMBOL_SEARCH"
+            f"&keywords={symbol}&apikey={self._api_key}"
+        )
         resp = self._query(lookup_api, symbol)
 
         # The API response is JSON with a "bestMatches" key holding a
         # list of blobs. We're looking for an exact match on the input symbol.
-        data = [obj for obj in resp.json()['bestMatches'] if
-                obj['1. symbol'] == symbol]
+        data = [obj for obj in resp.json()["bestMatches"] if obj["1. symbol"] == symbol]
         if not data:
-            raise UnknownSymbol(symbol, resp.json()['bestMatches'])
+            raise UnknownSymbol(symbol, resp.json()["bestMatches"])
 
         # Each key in the response is prefixed by a number and a space,
         # e.g. "2. type". Strip the number.
-        return {' '.join(k.split()[1:]): v for k, v in data[0].items()}
+        return {" ".join(k.split()[1:]): v for k, v in data[0].items()}
 
 
-def fetch_from_web(symbol: str, start_time: datetime=None) -> pd.DataFrame:
+def fetch_from_web(symbol: str, start_time: datetime = None) -> pd.DataFrame:
     """Return a table of historical security valuations
 
     Parameters
@@ -214,10 +236,10 @@ def fetch_from_web(symbol: str, start_time: datetime=None) -> pd.DataFrame:
     pd.DataFrame
         A table of historical quotes, indexed by the datetime of the quote
     """
-    log.info(f'Reading {symbol} data from Alpha Vantage.')
-    client = AlphaVantageClient(conf('av_api_key'))
+    log.info(f"Reading {symbol} data from Alpha Vantage.")
+    client = AlphaVantageClient(conf("av_api_key"))
     new_quotes = client.historical_quotes(symbol, start_time=start_time)
-    new_quotes.index.name = 'date'
+    new_quotes.index.name = "date"
 
     return new_quotes
 
@@ -238,7 +260,7 @@ def symbol_lookup(symbol: str) -> Dict[str, str]:
         A dictionary which includes keys "symbol", "name", "type",
         "region", and "currency".
     """
-    log.info(f'Reading {symbol} data from Alpha Vantage.')
-    client = AlphaVantageClient(conf('av_api_key'))
+    log.info(f"Reading {symbol} data from Alpha Vantage.")
+    client = AlphaVantageClient(conf("av_api_key"))
 
     return client.symbol_lookup(symbol)
