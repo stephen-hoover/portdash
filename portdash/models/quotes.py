@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from typing import Sequence, Union
 
@@ -73,7 +74,7 @@ class Quote(db.Model):
         return qu
 
     @classmethod
-    def get_price_at_date(cls, symbol: str, date: pd.datetime) -> float:
+    def get_price_at_date(cls, symbol: str, date: datetime) -> float:
         row = (cls.query
                .filter(db.and_(cls.symbol == symbol, cls.date == date))
                .first())
@@ -87,7 +88,7 @@ class Quote(db.Model):
     def get_price(cls,
                   symbol: str,
                   index: Union[pd.DatetimeIndex,
-                               Sequence[pd.datetime]]=None,
+                               Sequence[datetime]]=None,
                   default: float=None) -> pd.Series:
         """Retrieve a Series of prices for the requested security
 

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Tuple, Union
 
@@ -112,7 +112,7 @@ def relative_gain(account, n_days, annualize=False, ignore_zeros=False):
     return avg_pct_change
 
 
-def get_start_time(date_range: str, max_range: pd.datetime) -> pd.datetime:
+def get_start_time(date_range: str, max_range: datetime) -> datetime:
     today = pd.datetime.today()
     if date_range == 'max':
         return max_range
@@ -127,7 +127,7 @@ def get_start_time(date_range: str, max_range: pd.datetime) -> pd.datetime:
 
 
 def get_stop_time(date_range: str,
-                  max_range: pd.datetime) -> Union[pd.datetime, None]:
+                  max_range: datetime) -> Union[datetime, None]:
     if date_range == 'max':
         # Show the day of the last withdrawal, but no further.
         return max_range + pd.Timedelta(1, 'D')
@@ -135,7 +135,7 @@ def get_stop_time(date_range: str,
         return None
 
 
-def get_nonzero_range(trace: pd.Series) -> Tuple[pd.datetime, pd.datetime]:
+def get_nonzero_range(trace: pd.Series) -> Tuple[datetime, datetime]:
     trace_gt0 = trace[trace > 0.02]
     return trace_gt0.index.min(), trace_gt0.index.max()
 

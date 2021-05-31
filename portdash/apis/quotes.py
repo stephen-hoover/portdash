@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 def get_price(symbol: str,
               index: Union[pd.DatetimeIndex,
-                           Sequence[pd.datetime]]) -> pd.Series:
+                           Sequence[datetime]]) -> pd.Series:
     """Fetch prices for a given symbol in the provided date range"""
     this_quote = Quote.get_price(symbol, index)
 

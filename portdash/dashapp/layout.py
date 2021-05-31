@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import dash_core_components as dcc
 import dash_html_components as html
 import pandas as pd
@@ -63,8 +65,8 @@ layout = html.Div(children=[
     html.Hr(style={'margin-bottom': 0, 'margin-top': 0}),
     html.Div([
         html.Div([dcc.DatePickerRange(id='date-selector',
-                                      start_date=pd.datetime.today(),
-                                      end_date=pd.datetime.today(),
+                                      start_date=datetime.today(),
+                                      end_date=datetime.today(),
                                       display_format='MMM Do, YYYY'),
                   html.Div(id='value', children='Value box')],
                  className='six columns',
