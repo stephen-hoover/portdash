@@ -124,11 +124,11 @@ def relative_gain(account, n_days, annualize=False, ignore_zeros=False):
 
 
 def get_start_time(date_range: str, max_range: datetime) -> datetime:
-    today = pd.datetime.today()
+    today = datetime.today()
     if date_range == "max":
         return max_range
     elif date_range == "ytd":
-        return pd.datetime(year=today.year, month=1, day=1)
+        return datetime(year=today.year, month=1, day=1)
     elif date_range.endswith("month"):
         val = int(date_range[:-5])
         return today - pd.Timedelta(val * 30, "D")
