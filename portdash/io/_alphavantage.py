@@ -22,16 +22,12 @@ __all__ = [
 ]
 log = logging.getLogger(__name__)
 
+# These are the columns guaranteed to be returned by requests for quotes.
+QUOTE_INDEX = "timestamp"
 QUOTE_COLS = [
-    "timestamp",
-    "open",
-    "high",
-    "low",
     "close",
-    "adjusted_close",
     "volume",
     "dividend_amount",
-    "split_coefficient",
 ]
 CSV_READER_KWARGS = {"index_col": 0, "parse_dates": True, "infer_datetime_format": True}
 MIN_TIME = datetime(year=1970, month=1, day=1)
@@ -89,14 +85,26 @@ class AlphaVantageClient(metaclass=Singleton):
     """
 
     # Get historical prices from Alpha Vantage's API
-    AV_API = (
-        "https://www.alphavantage.co/query?"
-        "function=TIME_SERIES_DAILY_ADJUSTED"
-        "&symbol={symbol}"
-        "&outputsize={size}"
-        "&datatype=csv"
-        "&apikey={api_key}"
-    )
+    # The "weekly adjusted" endpoint includes dividend information
+    # and adjusts share prices for split events, but only gives
+    # prices at the end of each week.
+    _AV_API = {
+        "prices": (
+            "https://www.alphavantage.co/query?"
+            "function=TIME_SERIES_DAILY"
+            "&symbol={symbol}"
+            "&outputsize={size}"
+            "&datatype=csv"
+            "&apikey={api_key}"
+        ),
+        "dividends": (
+            "https://www.alphavantage.co/query?"
+            "function=TIME_SERIES_WEEKLY_ADJUSTED"
+            "&symbol={symbol}"
+            "&datatype=csv"
+            "&apikey={api_key}"
+        ),
+    }
 
     # Set limits for use of Alpha Vantage's free API
     max_per_day = 500  # Maximum number of API queries per day
@@ -144,8 +152,22 @@ class AlphaVantageClient(metaclass=Singleton):
         self._check_and_raise(response, symbol)
         return response
 
+    def _fetch_data(self, symbol: str, size: str, type: str) -> pd.DataFrame:
+        web_addr = AlphaVantageClient._AV_API[type].format(
+            symbol=symbol, size=size, api_key=self._api_key
+        )
+        response = self._query(web_addr, symbol)
+
+        df = pd.read_csv(io.BytesIO(response.content), **CSV_READER_KWARGS)
+        df.columns = [c.replace(" ", "_") for c in df.columns]
+        return df
+
     def historical_quotes(
-        self, symbol: str, start_time: datetime = None
+        self,
+        symbol: str,
+        start_time: datetime = None,
+        all_columns: bool = False,
+        return_dividends: bool = False,
     ) -> pd.DataFrame:
         """Return a table of historical security valuations
 
@@ -158,6 +180,13 @@ class AlphaVantageClient(metaclass=Singleton):
             Supplying a recent date will allow us to request fewer
             rows returned from the Alpha Vantage service.
             The default will return all available historical quotes.
+        all_columns : bool, optional
+            If True, return all columns provided by the AlphaVantage API.
+            Otherwise, return only guaranteed columns.
+        return_dividends : bool, optional
+            If True, include the "dividend_amount" column in the output.
+            If False, do not. Skipping the dividend column will save one API call
+            if it's not needed, and will be considerably faster on compact mode.
 
         Returns
         -------
@@ -165,8 +194,10 @@ class AlphaVantageClient(metaclass=Singleton):
             A table of historical quotes, indexed by the datetime of the quote
         """
         if start_time is not None and start_time >= datetime.today():
-            log.debug("No update needed; the requested start " "date is in the future.")
-            return pd.DataFrame(columns=QUOTE_COLS)
+            log.debug("No update needed; the requested start date is in the future.")
+            return pd.DataFrame(
+                columns=QUOTE_COLS, index=pd.Index([], name=QUOTE_INDEX)
+            )
         if start_time is None:
             start_time = MIN_TIME
 
@@ -176,12 +207,21 @@ class AlphaVantageClient(metaclass=Singleton):
         else:
             size = "full"  # Return full time series
             log.debug("Making full query")
-        web_addr = AlphaVantageClient.AV_API.format(
-            symbol=symbol, size=size, api_key=conf("av_api_key")
-        )
-        response = self._query(web_addr, symbol)
 
-        quotes = pd.read_csv(io.BytesIO(response.content), **CSV_READER_KWARGS)
+        quotes = self._fetch_data(symbol=symbol, size=size, type="prices")
+        if return_dividends:
+            dividends = self._fetch_data(symbol=symbol, size=size, type="dividends")
+
+            # Merge weekly dividend data into daily quotes
+            quotes["dividend_amount"] = dividends["dividend_amount"]
+            quotes["dividend_amount"] = quotes["dividend_amount"].fillna(0)
+        else:
+            quotes["dividend_amount"] = pd.NA
+
+        if not all_columns:
+            quotes = quotes[QUOTE_COLS]
+
+        quotes.index.name = QUOTE_INDEX
         return quotes[quotes.index >= start_time]
 
     def symbol_lookup(self, symbol: str) -> Dict[str, str]:
@@ -238,7 +278,9 @@ def fetch_from_web(symbol: str, start_time: datetime = None) -> pd.DataFrame:
     """
     log.info(f"Reading {symbol} data from Alpha Vantage.")
     client = AlphaVantageClient(conf("av_api_key"))
-    new_quotes = client.historical_quotes(symbol, start_time=start_time)
+    new_quotes = client.historical_quotes(
+        symbol, start_time=start_time, return_dividends=True
+    )
     new_quotes.index.name = "date"
 
     return new_quotes
