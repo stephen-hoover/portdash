@@ -24,7 +24,7 @@ from datetime import date
 from functools import lru_cache
 import os
 import pickle
-from typing import Dict, Tuple
+from typing import Dict, Iterable, Tuple
 
 import pandas as pd
 
@@ -65,6 +65,21 @@ def get_account(account_name: str) -> pd.DataFrame:
     return _get_accounts()[account_name]
 
 
+def _sum_dfs(dfs: Iterable[pd.DataFrame], fill_value=0) -> pd.DataFrame:
+    """Sum together many DataFrames, filling missing values
+
+    E.g., when summing two accounts, use "0" for securities which don't
+    exist in one of the accounts, not null.
+    """
+    summation = None
+    for df in dfs:
+        if summation is None:
+            summation = df
+        else:
+            summation = summation.add(df, fill_value=fill_value)
+    return summation
+
+
 @lru_cache(20)
 def sum_accounts(account_names: Tuple[str]) -> pd.DataFrame:
     """Return a new account which is the sum of the input accounts
@@ -84,7 +99,7 @@ def sum_accounts(account_names: Tuple[str]) -> pd.DataFrame:
     """
     if "All Accounts" in account_names:
         account_names = get_account_names(simulated=False)
-    return sum(get_account(name) for name in account_names)
+    return _sum_dfs(get_account(name) for name in account_names)
 
 
 def get_last_quote_date() -> date:
