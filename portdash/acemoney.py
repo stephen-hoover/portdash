@@ -173,6 +173,7 @@ def refresh_portfolio(refresh_cache: bool = False):
             accounts[row["Account"]] = port.init_portfolio(index)
         record_inv_action(all_accounts, row)
         record_inv_action(accounts[row["Account"]], row)
+    log.info("Totaling portfolio transactions for all accounts.")
     port.total_portfolio(all_accounts)
     for acct in accounts.values():
         port.total_portfolio(acct)

@@ -124,6 +124,7 @@ class Quote(db.Model):
                 db.session.query(cls)
                 .filter(cls.symbol == symbol)
                 .with_entities(cls.date, cls.price)
+                .order_by(cls.date)
                 .statement
             ),
             con=db.engine,
